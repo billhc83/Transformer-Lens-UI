@@ -1,0 +1,292 @@
+import { useState } from 'react'
+import axios from 'axios'
+
+const API = 'http://localhost:8000'
+
+interface TokenPred { token_id: number; token_str: string; probability: number }
+interface PosPreds { position: number; top_k: TokenPred[] }
+interface LayerResult { layer: number; label: string; predictions: PosPreds[] }
+interface LensResponse { results: LayerResult[]; str_tokens: string[]; n_layers: number }
+
+const panel: React.CSSProperties = {
+  background: 'rgba(255,255,255,0.03)',
+  border: '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12,
+  padding: 16,
+}
+
+function TokenChip({ token, isTarget, isFirst }: { token: TokenPred; isTarget: boolean; isFirst: boolean }) {
+  const opacity = Math.min(1, token.probability * 0.85 + 0.15)
+  return (
+    <span style={{
+      display: 'inline-block',
+      background: `rgba(0,212,255,${opacity * 0.25})`,
+      border: `1px solid ${isFirst && isTarget ? '#4ade80' : isTarget ? '#a855f7' : 'rgba(0,212,255,0.2)'}`,
+      borderRadius: 4,
+      padding: '2px 6px',
+      fontSize: 10,
+      fontFamily: 'JetBrains Mono, monospace',
+      color: isTarget ? '#fff' : 'rgba(255,255,255,0.5)',
+      marginRight: 2,
+      whiteSpace: 'nowrap',
+      maxWidth: 90,
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    }}>
+      {token.token_str.slice(0, 8)}{' '}
+      <span style={{ color: `rgba(0,212,255,${opacity})`, fontSize: 9 }}>
+        {(token.probability * 100).toFixed(1)}%
+      </span>
+    </span>
+  )
+}
+
+function LayerRow({
+  result, targetPos, firstHitLayer, strTokens,
+}: {
+  result: LayerResult
+  targetPos: number
+  firstHitLayer: number | null
+  strTokens: string[]
+}) {
+  const isFirst = firstHitLayer === result.layer
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 4,
+      padding: '3px 0',
+      borderLeft: isFirst ? '3px solid #4ade80' : '3px solid transparent',
+      paddingLeft: isFirst ? 8 : 8,
+    }}>
+      {/* Layer label */}
+      <span style={{
+        width: 52,
+        flexShrink: 0,
+        fontSize: 10,
+        fontFamily: 'JetBrains Mono, monospace',
+        color: isFirst ? '#4ade80' : 'rgba(255,255,255,0.35)',
+        textAlign: 'right',
+        paddingRight: 8,
+      }}>
+        {result.label}
+      </span>
+
+      {isFirst && (
+        <span style={{
+          fontSize: 8,
+          padding: '1px 5px',
+          borderRadius: 3,
+          background: 'rgba(74,222,128,0.15)',
+          border: '1px solid rgba(74,222,128,0.4)',
+          color: '#4ade80',
+          marginRight: 4,
+          flexShrink: 0,
+        }}>✦ EMERGES</span>
+      )}
+
+      {/* Position cells */}
+      <div style={{ display: 'flex', gap: 3, flexWrap: 'nowrap', overflow: 'hidden' }}>
+        {strTokens.map((tok, posIdx) => {
+          const posPred = result.predictions.find(p => p.position === posIdx)
+          if (!posPred || posPred.top_k.length === 0) return null
+          if (posIdx === targetPos) {
+            return (
+              <div key={posIdx} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {posPred.top_k.slice(0, 3).map((t, i) => (
+                  <TokenChip key={t.token_id} token={t} isTarget={true} isFirst={isFirst && i === 0} />
+                ))}
+              </div>
+            )
+          }
+          const top1 = posPred.top_k[0]
+          return (
+            <span key={posIdx} style={{
+              display: 'inline-block',
+              fontSize: 9,
+              fontFamily: 'JetBrains Mono, monospace',
+              color: 'rgba(255,255,255,0.2)',
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 3,
+              padding: '1px 4px',
+              maxWidth: 56,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {top1.token_str.slice(0, 6)}
+            </span>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export default function LogitLens() {
+  const [targetPos, setTargetPos] = useState(7)
+  const [data, setData] = useState<LensResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const run = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { data: res } = await axios.post<LensResponse>(`${API}/api/inference/logit_lens`, { top_k: 3 })
+      setData(res)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Request failed. Run /api/inference/run_with_cache first.')
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Find first layer where top-1 at targetPos has prob > 0.05
+  const firstHitLayer: number | null = (() => {
+    if (!data) return null
+    for (const lr of data.results) {
+      const p = lr.predictions.find(p => p.position === targetPos)
+      if (p && p.top_k[0]?.probability > 0.05) return lr.layer
+    }
+    return null
+  })()
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#0a0a0f', overflow: 'hidden' }}>
+      {/* Header */}
+      <div style={{
+        padding: '12px 20px',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: '#00d4ff', fontFamily: 'JetBrains Mono, monospace' }}>
+          Logit Lens
+        </span>
+        <span style={{
+          fontSize: 9,
+          padding: '2px 7px',
+          borderRadius: 4,
+          background: 'rgba(168,85,247,0.12)',
+          border: '1px solid rgba(168,85,247,0.3)',
+          color: '#a855f7',
+        }}>Phase 5</span>
+      </div>
+
+      {/* Controls */}
+      <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'JetBrains Mono, monospace' }}>
+          Target position:
+        </label>
+        <input
+          type="number"
+          value={targetPos}
+          min={0}
+          max={30}
+          onChange={e => setTargetPos(Number(e.target.value))}
+          style={{
+            width: 60,
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 6,
+            color: '#fff',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 12,
+            padding: '4px 8px',
+          }}
+        />
+        <button
+          onClick={run}
+          disabled={loading}
+          style={{
+            padding: '6px 18px',
+            background: loading ? 'rgba(0,212,255,0.1)' : 'rgba(0,212,255,0.15)',
+            border: '1px solid rgba(0,212,255,0.4)',
+            borderRadius: 6,
+            color: '#00d4ff',
+            fontSize: 11,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontFamily: 'JetBrains Mono, monospace',
+          }}
+        >
+          {loading ? 'Running…' : 'Run Logit Lens'}
+        </button>
+
+        {data && (
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono, monospace' }}>
+            {data.n_layers} layers · {data.str_tokens.length} tokens
+            {firstHitLayer !== null && (
+              <span style={{ color: '#4ade80', marginLeft: 10 }}>
+                ✦ answer emerges at {data.results[firstHitLayer]?.label}
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{ padding: '8px 20px', color: '#ff6b6b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', flexShrink: 0 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Column headers */}
+      {data && (
+        <div style={{ padding: '4px 20px', display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+          <span style={{ width: 52, flexShrink: 0 }} />
+          {data.str_tokens.map((t, i) => (
+            <span key={i} style={{
+              fontSize: 9,
+              fontFamily: 'JetBrains Mono, monospace',
+              color: i === targetPos ? '#a855f7' : 'rgba(255,255,255,0.2)',
+              background: i === targetPos ? 'rgba(168,85,247,0.1)' : 'transparent',
+              border: i === targetPos ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
+              borderRadius: 3,
+              padding: '1px 4px',
+              minWidth: i === targetPos ? 70 : 40,
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {t.slice(0, 8)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Layer rows */}
+      {data ? (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 20px 20px' }}>
+          {data.results.map(lr => (
+            <LayerRow
+              key={lr.layer}
+              result={lr}
+              targetPos={targetPos}
+              firstHitLayer={firstHitLayer}
+              strTokens={data.str_tokens}
+            />
+          ))}
+        </div>
+      ) : (
+        !loading && (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ ...panel, textAlign: 'center', maxWidth: 360 }}>
+              <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.2 }}>◉</div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'JetBrains Mono, monospace' }}>
+                Run <span style={{ color: '#00d4ff' }}>/api/inference/run_with_cache</span> first,<br />
+                then click Run Logit Lens.
+              </div>
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-bg:        #0a0a0f;
+  --color-surface:   rgba(255,255,255,0.03);
+  --color-border:    rgba(255,255,255,0.08);
+  --color-cyan:      #00d4ff;
+  --color-purple:    #a855f7;
+  --color-danger:    #ff6b6b;
+  --color-success:   #4ade80;
+  --color-muted:     rgba(255,255,255,0.45);
+  --font-mono:       'JetBrains Mono', monospace;
+  --radius-panel:    12px;
+  --shadow-panel:    0 4px 24px rgba(0,212,255,0.05);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #0a0a0f;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,212,255,0.4); }
