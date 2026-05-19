@@ -3,6 +3,8 @@ from pydantic import BaseModel
 import torch
 import numpy as np
 from scipy.special import softmax
+import einops
+from transformer_lens import ActivationCache
 
 from backend.services.model_manager import model_manager
 from backend.services.cache_store import cache_store
@@ -25,6 +27,11 @@ class RunWithCacheRequest(BaseModel):
 
 class LogitLensRequest(BaseModel):
     top_k: int = 5
+
+
+class AttributionRequest(BaseModel):
+    answer_token: str
+    mode: str = "full"  # "full" | "by_layer" | "by_head"
 
 
 @router.post("/tokenize")
@@ -158,3 +165,86 @@ async def logit_lens_endpoint(request: LogitLensRequest):
         results.append({"layer": layer_idx, "label": label, "predictions": preds_per_pos})
 
     return {"results": results, "str_tokens": str_tokens, "n_layers": n_layers}
+
+
+@router.post("/attribution")
+async def attribution_endpoint(request: AttributionRequest):
+    model = model_manager.model
+    if model is None:
+        raise HTTPException(status_code=400, detail="No model loaded")
+    if not cache_store.cache:
+        raise HTTPException(status_code=400, detail="No cache. Run /api/inference/run_with_cache first.")
+
+    try:
+        answer_token_id = int(model.to_single_token(request.answer_token))
+    except Exception:
+        toks = model.to_tokens(request.answer_token, prepend_bos=False)
+        answer_token_id = int(toks[0, 0].item())
+
+    cache = ActivationCache(cache_store.cache, model)
+    str_tokens = cache_store.str_tokens
+
+    with torch.no_grad():
+        if request.mode == "by_head":
+            head_stack, head_labels = cache.stack_head_results(return_labels=True)
+            mlp_parts = []
+            mlp_labels = []
+            for l in range(model.cfg.n_layers):
+                key = f"blocks.{l}.hook_mlp_out"
+                if key in cache_store.cache:
+                    mlp_parts.append(cache_store.cache[key])
+                    mlp_labels.append(f"L{l}_mlp")
+            if mlp_parts:
+                mlp_tensor = torch.stack(mlp_parts, dim=0)
+                combined = torch.cat([head_stack, mlp_tensor], dim=0)
+                labels = list(head_labels) + mlp_labels
+            else:
+                combined = head_stack
+                labels = list(head_labels)
+            combined_ln = cache.apply_ln_to_stack(combined, layer=-1, has_batch_dim=True)
+
+        else:
+            stack, raw_labels = cache.decompose_resid(mode="all", return_labels=True, apply_ln=False)
+            combined_ln = cache.apply_ln_to_stack(stack, layer=-1, has_batch_dim=True)
+            labels = list(raw_labels)
+
+            if request.mode == "by_layer":
+                new_parts = []
+                new_labels = []
+                embed_i = labels.index("embed") if "embed" in labels else 0
+                pos_i = labels.index("pos_embed") if "pos_embed" in labels else -1
+                embed_contrib = combined_ln[embed_i] + (combined_ln[pos_i] if pos_i >= 0 else 0)
+                new_parts.append(embed_contrib)
+                new_labels.append("embed")
+                for l in range(model.cfg.n_layers):
+                    attn_lbl = f"{l}_attn_out"
+                    mlp_lbl = f"{l}_mlp_out"
+                    ai = labels.index(attn_lbl) if attn_lbl in labels else -1
+                    mi = labels.index(mlp_lbl) if mlp_lbl in labels else -1
+                    if ai >= 0 and mi >= 0:
+                        new_parts.append(combined_ln[ai] + combined_ln[mi])
+                    elif ai >= 0:
+                        new_parts.append(combined_ln[ai])
+                    elif mi >= 0:
+                        new_parts.append(combined_ln[mi])
+                    else:
+                        continue
+                    new_labels.append(f"L{l}")
+                combined_ln = torch.stack(new_parts, dim=0)
+                labels = new_labels
+
+        W_U = model.W_U  # [d_model, d_vocab]
+        attrs = einops.einsum(
+            combined_ln, W_U,
+            "comp batch pos d_model, d_model d_vocab -> comp batch pos d_vocab",
+        )
+        scores = attrs[:, 0, :, answer_token_id].detach().cpu().float().numpy()
+
+    return {
+        "scores": scores.tolist(),
+        "labels": labels,
+        "str_tokens": str_tokens,
+        "answer_token_id": answer_token_id,
+        "answer_token_str": request.answer_token,
+        "mode": request.mode,
+    }

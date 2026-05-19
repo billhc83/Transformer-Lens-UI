@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import models, inference, activations
+from backend.routers import models, inference, activations, patching
 
 app = FastAPI(title="TransformerLens UI", version="0.1.0")
 
@@ -16,6 +16,7 @@ app.add_middleware(
 app.include_router(models.router)
 app.include_router(inference.router)
 app.include_router(activations.router)
+app.include_router(patching.router)
 
 
 @app.get("/api/health")

@@ -5,6 +5,8 @@ import ForwardPass from './pages/ForwardPass/ForwardPass'
 import ActivationBrowser from './pages/ActivationBrowser/ActivationBrowser'
 import AttentionViz from './pages/AttentionViz/AttentionViz'
 import LogitLens from './pages/LogitLens/LogitLens'
+import Attribution from './pages/Attribution/Attribution'
+import PatchingLab from './pages/PatchingLab/PatchingLab'
 
 type PageId =
   | 'model-hub'
@@ -34,8 +36,8 @@ const NAV: NavItem[] = [
   { id: 'activation-browser', label: 'Activations',      phase: 3,  icon: '⊞', available: true  },
   { id: 'attention-viz',      label: 'Attention',        phase: 4,  icon: '◎', available: true  },
   { id: 'logit-lens',         label: 'Logit Lens',       phase: 5,  icon: '◉', available: true  },
-  { id: 'attribution',        label: 'Attribution',      phase: 6,  icon: '⊛', available: false },
-  { id: 'patching-lab',       label: 'Patching Lab',     phase: 7,  icon: '⊗', available: false },
+  { id: 'attribution',        label: 'Attribution',      phase: 6,  icon: '⊛', available: true  },
+  { id: 'patching-lab',       label: 'Patching Lab',     phase: 7,  icon: '⊗', available: true  },
   { id: 'circuit-analyzer',   label: 'Circuit Analyzer', phase: 8,  icon: '⬡', available: false },
   { id: 'hook-lab',           label: 'Hook Lab',         phase: 9,  icon: '⊕', available: false },
   { id: 'generation-studio',  label: 'Generation',       phase: 10, icon: '▷', available: false },
@@ -131,7 +133,9 @@ export default function App() {
         {page === 'activation-browser' && <ActivationBrowser />}
         {page === 'attention-viz' && <AttentionViz />}
         {page === 'logit-lens' && <LogitLens />}
-        {page !== 'model-hub' && page !== 'token-inspector' && page !== 'forward-pass' && page !== 'activation-browser' && page !== 'attention-viz' && page !== 'logit-lens' && (
+        {page === 'attribution' && <Attribution />}
+        {page === 'patching-lab' && <PatchingLab />}
+        {page !== 'model-hub' && page !== 'token-inspector' && page !== 'forward-pass' && page !== 'activation-browser' && page !== 'attention-viz' && page !== 'logit-lens' && page !== 'attribution' && page !== 'patching-lab' && (
           <Placeholder label={NAV.find((n) => n.id === page)?.label ?? page} />
         )}
       </main>
