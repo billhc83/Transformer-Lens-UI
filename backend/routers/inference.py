@@ -62,6 +62,12 @@ async def forward_endpoint(request: ForwardRequest):
     logits_np = logits[0].detach().cpu().float().numpy()  # [seq_len, d_vocab]
 
     str_tokens = list(model.to_str_tokens(request.text, prepend_bos=True))
+    # Drop the BOS token from display — it's needed for inference but shouldn't
+    # appear as a chip. Logits at position i predict the token at position i+1,
+    # so after slicing, logits_np[i] still predicts what follows str_tokens[i].
+    str_tokens = str_tokens[1:]
+    logits_np = logits_np[1:]
+
     top_k = min(request.top_k, logits_np.shape[-1])
 
     predictions = []
