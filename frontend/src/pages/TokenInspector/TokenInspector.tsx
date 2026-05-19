@@ -19,7 +19,7 @@ export default function TokenInspector() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('http://localhost:8000/api/inference/tokenize', {
+      const res = await fetch('/api/inference/tokenize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),

@@ -7,6 +7,9 @@ import AttentionViz from './pages/AttentionViz/AttentionViz'
 import LogitLens from './pages/LogitLens/LogitLens'
 import Attribution from './pages/Attribution/Attribution'
 import PatchingLab from './pages/PatchingLab/PatchingLab'
+import CircuitAnalyzer from './pages/CircuitAnalyzer/CircuitAnalyzer'
+import HookLab from './pages/HookLab/HookLab'
+import GenerationStudio from './pages/GenerationStudio/GenerationStudio'
 
 type PageId =
   | 'model-hub'
@@ -38,23 +41,10 @@ const NAV: NavItem[] = [
   { id: 'logit-lens',         label: 'Logit Lens',       phase: 5,  icon: '◉', available: true  },
   { id: 'attribution',        label: 'Attribution',      phase: 6,  icon: '⊛', available: true  },
   { id: 'patching-lab',       label: 'Patching Lab',     phase: 7,  icon: '⊗', available: true  },
-  { id: 'circuit-analyzer',   label: 'Circuit Analyzer', phase: 8,  icon: '⬡', available: false },
-  { id: 'hook-lab',           label: 'Hook Lab',         phase: 9,  icon: '⊕', available: false },
-  { id: 'generation-studio',  label: 'Generation',       phase: 10, icon: '▷', available: false },
+  { id: 'circuit-analyzer',   label: 'Circuit Analyzer', phase: 8,  icon: '⬡', available: true  },
+  { id: 'hook-lab',           label: 'Hook Lab',         phase: 9,  icon: '⊕', available: true  },
+  { id: 'generation-studio',  label: 'Generation',       phase: 10, icon: '▷', available: true  },
 ]
-
-function Placeholder({ label }: { label: string }) {
-  return (
-    <div className="flex flex-1 items-center justify-center text-center">
-      <div>
-        <div className="text-5xl mb-4" style={{ opacity: 0.15 }}>⬡</div>
-        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          {label} — coming in a future phase
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function App() {
   const [page, setPage] = useState<PageId>('model-hub')
@@ -135,9 +125,9 @@ export default function App() {
         {page === 'logit-lens' && <LogitLens />}
         {page === 'attribution' && <Attribution />}
         {page === 'patching-lab' && <PatchingLab />}
-        {page !== 'model-hub' && page !== 'token-inspector' && page !== 'forward-pass' && page !== 'activation-browser' && page !== 'attention-viz' && page !== 'logit-lens' && page !== 'attribution' && page !== 'patching-lab' && (
-          <Placeholder label={NAV.find((n) => n.id === page)?.label ?? page} />
-        )}
+        {page === 'circuit-analyzer' && <CircuitAnalyzer />}
+        {page === 'hook-lab' && <HookLab />}
+        {page === 'generation-studio' && <GenerationStudio />}
       </main>
     </div>
   )

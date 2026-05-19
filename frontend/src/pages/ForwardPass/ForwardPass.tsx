@@ -32,7 +32,7 @@ export default function ForwardPass() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('http://localhost:8000/api/inference/forward', {
+      const res = await fetch('/api/inference/forward', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, top_k: 10 }),

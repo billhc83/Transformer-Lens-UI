@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import axios from 'axios'
 
-const API = 'http://localhost:8000'
+const API = ''
 
 interface TokenPred { token_id: number; token_str: string; probability: number }
 interface PosPreds { position: number; top_k: TokenPred[] }
@@ -42,12 +42,13 @@ function TokenChip({ token, isTarget, isFirst }: { token: TokenPred; isTarget: b
 }
 
 function LayerRow({
-  result, targetPos, firstHitLayer, strTokens,
+  result, targetPos, firstHitLayer, strTokens, cellWidth,
 }: {
   result: LayerResult
   targetPos: number
   firstHitLayer: number | null
   strTokens: string[]
+  cellWidth: number
 }) {
   const isFirst = firstHitLayer === result.layer
   return (
@@ -57,22 +58,21 @@ function LayerRow({
       gap: 4,
       padding: '3px 0',
       borderLeft: isFirst ? '3px solid #4ade80' : '3px solid transparent',
-      paddingLeft: isFirst ? 8 : 8,
+      paddingLeft: 8,
     }}>
-      {/* Layer label */}
-      <span style={{
-        width: 52,
-        flexShrink: 0,
-        fontSize: 10,
-        fontFamily: 'JetBrains Mono, monospace',
-        color: isFirst ? '#4ade80' : 'rgba(255,255,255,0.35)',
-        textAlign: 'right',
-        paddingRight: 8,
-      }}>
-        {result.label}
-      </span>
-
-      {isFirst && (
+      {/* Fixed-width label area: label + badge always occupy the same space */}
+      <div style={{ width: 120, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{
+          width: 52,
+          flexShrink: 0,
+          fontSize: 10,
+          fontFamily: 'JetBrains Mono, monospace',
+          color: isFirst ? '#4ade80' : 'rgba(255,255,255,0.35)',
+          textAlign: 'right',
+          paddingRight: 8,
+        }}>
+          {result.label}
+        </span>
         <span style={{
           fontSize: 8,
           padding: '1px 5px',
@@ -80,10 +80,10 @@ function LayerRow({
           background: 'rgba(74,222,128,0.15)',
           border: '1px solid rgba(74,222,128,0.4)',
           color: '#4ade80',
-          marginRight: 4,
           flexShrink: 0,
+          visibility: isFirst ? 'visible' : 'hidden',
         }}>✦ EMERGES</span>
-      )}
+      </div>
 
       {/* Position cells */}
       <div style={{ display: 'flex', gap: 3, flexWrap: 'nowrap', overflow: 'hidden' }}>
@@ -92,7 +92,7 @@ function LayerRow({
           if (!posPred || posPred.top_k.length === 0) return null
           if (posIdx === targetPos) {
             return (
-              <div key={posIdx} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div key={posIdx} style={{ width: cellWidth + 20, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {posPred.top_k.slice(0, 3).map((t, i) => (
                   <TokenChip key={t.token_id} token={t} isTarget={true} isFirst={isFirst && i === 0} />
                 ))}
@@ -103,6 +103,8 @@ function LayerRow({
           return (
             <span key={posIdx} style={{
               display: 'inline-block',
+              width: cellWidth,
+              flexShrink: 0,
               fontSize: 9,
               fontFamily: 'JetBrains Mono, monospace',
               color: 'rgba(255,255,255,0.2)',
@@ -110,10 +112,10 @@ function LayerRow({
               border: '1px solid rgba(255,255,255,0.06)',
               borderRadius: 3,
               padding: '1px 4px',
-              maxWidth: 56,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              boxSizing: 'border-box',
             }}>
               {top1.token_str.slice(0, 6)}
             </span>
@@ -143,6 +145,13 @@ export default function LogitLens() {
       setLoading(false)
     }
   }
+
+  // Fixed cell width based on the longest displayed token (6px per char + padding)
+  const cellWidth = useMemo(() => {
+    if (!data) return 48
+    const maxLen = Math.max(...data.str_tokens.map(t => Math.min(t.length, 8)), 3)
+    return maxLen * 6 + 10
+  }, [data])
 
   // Find first layer where top-1 at targetPos has prob > 0.05
   const firstHitLayer: number | null = (() => {
@@ -239,7 +248,8 @@ export default function LogitLens() {
       {/* Column headers */}
       {data && (
         <div style={{ padding: '4px 20px', display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-          <span style={{ width: 52, flexShrink: 0 }} />
+          {/* Match the fixed label area width used in LayerRow */}
+          <span style={{ width: 120, flexShrink: 0 }} />
           {data.str_tokens.map((t, i) => (
             <span key={i} style={{
               fontSize: 9,
@@ -249,11 +259,13 @@ export default function LogitLens() {
               border: i === targetPos ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
               borderRadius: 3,
               padding: '1px 4px',
-              minWidth: i === targetPos ? 70 : 40,
+              width: i === targetPos ? cellWidth + 20 : cellWidth,
+              flexShrink: 0,
               textAlign: 'center',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
+              boxSizing: 'border-box',
             }}>
               {t.slice(0, 8)}
             </span>
@@ -271,6 +283,7 @@ export default function LogitLens() {
               targetPos={targetPos}
               firstHitLayer={firstHitLayer}
               strTokens={data.str_tokens}
+              cellWidth={cellWidth}
             />
           ))}
         </div>

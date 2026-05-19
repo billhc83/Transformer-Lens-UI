@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import axios from 'axios'
 import Plot from 'react-plotly.js'
 
-const API = 'http://localhost:8000'
+const API = ''
 
 interface AttributionResponse {
   scores: number[][]       // [n_components, n_pos]
@@ -221,6 +221,14 @@ export default function Attribution() {
         </div>
       )}
 
+      {loading && !data && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono, monospace' }}>
+            Computing attribution scores…
+          </div>
+        </div>
+      )}
+
       {data ? (
         <div style={{ flex: 1, display: 'flex', gap: 12, padding: '12px 20px', overflow: 'hidden', minHeight: 0 }}>
           {/* Heatmap panel */}
@@ -244,7 +252,7 @@ export default function Attribution() {
                   config={{ displayModeBar: false, responsive: true }}
                   onClick={(event: any) => {
                     const pt = event.points?.[0]
-                    if (pt != null) setFocusPos(pt.x as number)
+                    if (pt != null) setFocusPos(pt.pointIndex?.[1] ?? pt.x as number)
                   }}
                 />
               )}

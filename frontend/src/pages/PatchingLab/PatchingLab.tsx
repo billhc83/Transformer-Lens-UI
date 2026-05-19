@@ -2,7 +2,7 @@ import { useState } from 'react'
 import axios from 'axios'
 import Plot from 'react-plotly.js'
 
-const API = 'http://localhost:8000'
+const API = ''
 
 interface PatchingResponse {
   results: Record<string, number[][]>

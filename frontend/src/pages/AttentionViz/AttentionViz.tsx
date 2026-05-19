@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import axios from 'axios'
 import AttentionHeatmap from '../../components/viz/AttentionHeatmap'
 
-const API = 'http://localhost:8000'
+const API = ''
 
 const panel: React.CSSProperties = {
   background: 'rgba(255,255,255,0.03)',

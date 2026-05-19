@@ -233,12 +233,13 @@ async def attribution_endpoint(request: AttributionRequest):
                 combined_ln = torch.stack(new_parts, dim=0)
                 labels = new_labels
 
-        W_U = model.W_U  # [d_model, d_vocab]
-        attrs = einops.einsum(
-            combined_ln, W_U,
-            "comp batch pos d_model, d_model d_vocab -> comp batch pos d_vocab",
-        )
-        scores = attrs[:, 0, :, answer_token_id].detach().cpu().float().numpy()
+        # Project only onto the answer token direction to avoid building the
+        # full (comp, batch, pos, d_vocab) tensor, which is ~280 MB for gpt2 by_head.
+        w_answer = model.W_U[:, answer_token_id]  # [d_model]
+        scores = einops.einsum(
+            combined_ln[:, 0], w_answer,
+            "comp pos d_model, d_model -> comp pos",
+        ).detach().cpu().float().numpy()
 
     return {
         "scores": scores.tolist(),
