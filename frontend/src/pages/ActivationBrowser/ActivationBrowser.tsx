@@ -11,7 +11,7 @@ const GUIDE: InterpretationGuide = {
     'Hook names follow the pattern blocks.{layer}.{module}.{hook_name} — for example, ' +
     'blocks.9.hook_resid_post is the residual stream after all of layer 9\'s computations. ' +
     'Selecting a hook fetches its raw tensor and renders it as a colour heatmap (rows = sequence positions, columns = features). ' +
-    'Bright cells = high positive activation; dark cells = near-zero or negative.',
+    'Bright cyan = strong positive activation; bright red = strong negative activation; near-black = zero.',
   example: {
     prompt: 'Run cache on "The Eiffel Tower is in", then select blocks.9.hook_resid_post',
     output:

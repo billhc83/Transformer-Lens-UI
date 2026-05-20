@@ -16,20 +16,15 @@ interface Props {
 }
 
 function valueToColor(val: number, min: number, max: number): string {
-  const t = max === min ? 0.5 : Math.max(0, Math.min(1, (val - min) / (max - min)));
-  // blue (#0000ff) → cyan (#00d4ff) → white (#ffffff)
-  if (t < 0.5) {
-    const s = t * 2;
-    const r = Math.round(0 + s * 0);
-    const g = Math.round(0 + s * 212);
-    const b = 255;
-    return `rgb(${r},${g},${b})`;
+  // Diverging scale centered at 0: red (negative) → near-black (zero) → cyan (positive)
+  const absMax = Math.max(Math.abs(min), Math.abs(max), 0.001);
+  const t = Math.max(-1, Math.min(1, val / absMax));
+  if (t >= 0) {
+    const s = t;
+    return `rgb(${Math.round(s * 0)},${Math.round(s * 212)},${Math.round(20 + s * 235)})`;
   } else {
-    const s = (t - 0.5) * 2;
-    const r = Math.round(0 + s * 255);
-    const g = Math.round(212 + s * (255 - 212));
-    const b = Math.round(255 + s * (255 - 255));
-    return `rgb(${r},${g},${b})`;
+    const s = -t;
+    return `rgb(${Math.round(30 + s * 225)},${Math.round(s * 30)},${Math.round(20 + s * 10)})`;
   }
 }
 

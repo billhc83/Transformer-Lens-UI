@@ -98,6 +98,7 @@ export default function InterpretationModal({
   const [insightLoading, setInsightLoading] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const prevDataStr = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -106,15 +107,25 @@ export default function InterpretationModal({
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
-  // Reset insight when modal closes or data changes
+  // Reset insight when modal closes or when liveData content changes (user regenerated data)
   useEffect(() => {
     if (!isOpen) {
       abortRef.current?.abort();
       setInsight('');
       setInsightError(null);
       setInsightLoading(false);
+      prevDataStr.current = null;
+      return;
     }
-  }, [isOpen]);
+    const str = liveData ? JSON.stringify(liveData) : null;
+    if (prevDataStr.current !== null && prevDataStr.current !== str) {
+      abortRef.current?.abort();
+      setInsight('');
+      setInsightError(null);
+      setInsightLoading(false);
+    }
+    prevDataStr.current = str;
+  }, [isOpen, liveData]);
 
   async function getInsight() {
     if (!liveData || insightLoading) return;

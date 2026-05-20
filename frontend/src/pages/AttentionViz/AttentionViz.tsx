@@ -5,6 +5,51 @@ import InterpretationModal, { type InterpretationGuide } from '../../components/
 
 const API = ''
 
+interface HeadClass {
+  label: string
+  color: string
+  desc: string
+}
+
+function classifyHead(pattern: number[][]): HeadClass {
+  const nQ = pattern.length
+  const nK = pattern[0]?.length ?? 0
+  if (nQ === 0 || nK === 0) return { label: 'empty', color: '#64748b', desc: 'No data' }
+
+  // Diagonal: each token attends to itself
+  let diagScore = 0
+  for (let i = 0; i < Math.min(nQ, nK); i++) diagScore += pattern[i][i]
+  diagScore /= Math.min(nQ, nK)
+
+  // Prev-token: tokens attend one step back
+  let prevScore = 0
+  for (let i = 1; i < nQ; i++) prevScore += pattern[i][i - 1]
+  prevScore /= Math.max(1, nQ - 1)
+
+  // BOS sink: most tokens attend to position 0
+  let bosScore = 0
+  for (let i = 1; i < nQ; i++) bosScore += pattern[i][0]
+  bosScore /= Math.max(1, nQ - 1)
+
+  // Last-pos: tokens attend to the final key position
+  let lastScore = 0
+  for (let i = 0; i < nQ; i++) lastScore += pattern[i][nK - 1]
+  lastScore /= nQ
+
+  // Entropy uniformity
+  const flat = pattern.flat()
+  const entropy = -flat.reduce((acc, v) => acc + (v > 1e-9 ? v * Math.log(v) : 0), 0)
+  const normalizedEntropy = entropy / (Math.log(nK) * nQ)
+
+  const T = 0.28
+  if (diagScore > T) return { label: 'diagonal', color: '#a78bfa', desc: 'Each token attends to itself — copies its own representation forward' }
+  if (prevScore > T) return { label: 'prev-token', color: '#34d399', desc: 'Tokens attend to the previous position — common in early induction heads' }
+  if (bosScore > T) return { label: 'BOS sink', color: '#fb923c', desc: 'Most tokens attend to position 0 — acts as a no-op attention sink' }
+  if (lastScore > T) return { label: 'last-pos', color: '#f472b6', desc: 'Tokens attend to the final position — often used for gathering context' }
+  if (normalizedEntropy > 0.72) return { label: 'uniform', color: '#94a3b8', desc: 'Attention spread evenly — low selectivity, weak signal' }
+  return { label: 'complex', color: '#00d4ff', desc: 'Context-specific or multi-token pattern — inspect for structured circuits' }
+}
+
 const GUIDE: InterpretationGuide = {
   overview:
     'Attention Viz shows the attention weight matrix for every head in a transformer layer. ' +
@@ -208,56 +253,99 @@ export default function AttentionViz() {
             Layer {layer} — {patterns.length} heads
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            {patterns.map((pat, h) => (
-              <div
-                key={h}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
-              >
-                <AttentionHeatmap
-                  compact
-                  pattern={pat}
-                  strTokens={strTokens}
-                  headIndex={h}
-                  layerIndex={layer}
-                  onClick={() => setSelectedHead(h === selectedHead ? null : h)}
-                  selected={selectedHead === h}
-                />
-                <span style={{ fontSize: 10, color: '#00d4ff' }}>H{h}</span>
-              </div>
-            ))}
+            {patterns.map((pat, h) => {
+              const cls = classifyHead(pat)
+              return (
+                <div
+                  key={h}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                  title={cls.desc}
+                >
+                  <AttentionHeatmap
+                    compact
+                    pattern={pat}
+                    strTokens={strTokens}
+                    headIndex={h}
+                    layerIndex={layer}
+                    onClick={() => setSelectedHead(h === selectedHead ? null : h)}
+                    selected={selectedHead === h}
+                    headLabelColor={cls.color}
+                  />
+                  <span style={{ fontSize: 9, color: '#00d4ff' }}>H{h}</span>
+                  <span
+                    style={{
+                      fontSize: 8,
+                      color: cls.color,
+                      background: `${cls.color}18`,
+                      border: `1px solid ${cls.color}44`,
+                      borderRadius: 4,
+                      padding: '1px 5px',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {cls.label}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
 
       {/* Expanded view */}
-      {patterns && selectedHead !== null && (
-        <div style={panel}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>
-              Layer {layer} · Head {selectedHead}
-            </span>
-            <div>
-              {(() => {
-                const s = headStats(patterns[selectedHead])
-                return (
-                  <>
-                    {statChip('min', s.min)}
-                    {statChip('max', s.max)}
-                    {statChip('mean', s.mean)}
-                  </>
-                )
-              })()}
+      {patterns && selectedHead !== null && (() => {
+        const cls = classifyHead(patterns[selectedHead])
+        const s = headStats(patterns[selectedHead])
+        return (
+          <div style={panel}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>
+                Layer {layer} · Head {selectedHead}
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: cls.color,
+                  background: `${cls.color}18`,
+                  border: `1px solid ${cls.color}55`,
+                  borderRadius: 6,
+                  padding: '2px 10px',
+                  fontFamily: 'JetBrains Mono, monospace',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {cls.label}
+              </span>
+              <div>
+                {statChip('min', s.min)}
+                {statChip('max', s.max)}
+                {statChip('mean', s.mean)}
+              </div>
             </div>
+            {/* Head behavior description */}
+            <div
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.55)',
+                background: `${cls.color}0d`,
+                border: `1px solid ${cls.color}2a`,
+                borderRadius: 6,
+                padding: '6px 12px',
+                marginBottom: 14,
+              }}
+            >
+              {cls.desc}
+            </div>
+            <AttentionHeatmap
+              compact={false}
+              pattern={patterns[selectedHead]}
+              strTokens={strTokens}
+              headIndex={selectedHead}
+              layerIndex={layer}
+            />
           </div>
-          <AttentionHeatmap
-            compact={false}
-            pattern={patterns[selectedHead]}
-            strTokens={strTokens}
-            headIndex={selectedHead}
-            layerIndex={layer}
-          />
-        </div>
-      )}
+        )
+      })()}
       <InterpretationModal
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}

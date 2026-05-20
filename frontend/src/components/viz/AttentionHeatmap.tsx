@@ -8,14 +8,27 @@ interface AttentionHeatmapProps {
   compact?: boolean
   onClick?: () => void
   selected?: boolean
+  headLabel?: string
+  headLabelColor?: string
 }
 
+// Plasma colormap: dark blue → purple → magenta → orange → yellow
+const PLASMA = [
+  [13, 8, 135],
+  [126, 3, 168],
+  [204, 71, 120],
+  [248, 149, 64],
+  [240, 249, 33],
+] as const
+
 function cellColor(v: number): string {
-  // 0 → #0a0a0f (10,10,15)  →  1 → #00d4ff (0,212,255)
-  const r = Math.round(10 + v * (0 - 10))
-  const g = Math.round(10 + v * (212 - 10))
-  const b = Math.round(15 + v * (255 - 15))
-  return `rgb(${r},${g},${b})`
+  const t = Math.max(0, Math.min(1, v))
+  const scaled = t * (PLASMA.length - 1)
+  const i = Math.min(Math.floor(scaled), PLASMA.length - 2)
+  const frac = scaled - i
+  const [r0, g0, b0] = PLASMA[i]
+  const [r1, g1, b1] = PLASMA[i + 1]
+  return `rgb(${Math.round(r0 + frac * (r1 - r0))},${Math.round(g0 + frac * (g1 - g0))},${Math.round(b0 + frac * (b1 - b0))})`
 }
 
 interface Tooltip { q: string; k: string; v: number; x: number; y: number }
@@ -27,6 +40,8 @@ export default function AttentionHeatmap({
   compact = false,
   onClick,
   selected = false,
+  headLabel,
+  headLabelColor = '#00d4ff',
 }: AttentionHeatmapProps) {
   const [tooltip, setTooltip] = useState<Tooltip | null>(null)
 
@@ -122,13 +137,29 @@ export default function AttentionHeatmap({
             x={2}
             y={11}
             fontSize={8}
-            fill="#00d4ff"
+            fill={headLabelColor}
             fontFamily="JetBrains Mono, monospace"
           >
             H{headIndex}
           </text>
         )}
       </svg>
+
+      {/* Color legend (expanded mode only) */}
+      {!compact && (
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', fontFamily: 'JetBrains Mono, monospace' }}>0</span>
+          <div
+            style={{
+              flex: 1,
+              height: 8,
+              borderRadius: 4,
+              background: `linear-gradient(to right, ${PLASMA.map((c, i) => `rgb(${c[0]},${c[1]},${c[2]}) ${(i / (PLASMA.length - 1)) * 100}%`).join(', ')})`,
+            }}
+          />
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', fontFamily: 'JetBrains Mono, monospace' }}>1</span>
+        </div>
+      )}
 
       {/* Tooltip */}
       {tooltip && (

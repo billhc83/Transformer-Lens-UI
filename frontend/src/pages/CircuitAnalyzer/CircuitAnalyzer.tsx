@@ -154,7 +154,9 @@ function getTopEdges(matrix: number[][], labels: string[], n: number) {
 export default function CircuitAnalyzer() {
   const [info, setInfo] = useState<HeadLabelsResponse | null>(null)
   const [scores, setScores] = useState<CompositionResponse | null>(null)
-  const [threshold, setThreshold] = useState(0.05)
+  const [threshold, setThreshold] = useState(0.01)
+  const [sliderMax, setSliderMax] = useState(0.1)
+  const [scoreMax, setScoreMax] = useState<number | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [qkData, setQkData] = useState<QKResponse | null>(null)
   const [ovData, setOvData] = useState<OVResponse | null>(null)
@@ -186,6 +188,21 @@ export default function CircuitAnalyzer() {
       })
       setScores(res.data)
       setInfo(i => i ?? { labels: res.data.labels, n_layers: res.data.n_layers, n_heads: res.data.n_heads })
+      // Calibrate slider to actual data range
+      const flat = [
+        ...res.data.q_scores.flat(),
+        ...res.data.k_scores.flat(),
+        ...res.data.v_scores.flat(),
+      ]
+      const actualMax = Math.max(...flat)
+      setScoreMax(actualMax)
+      // Give 50% headroom above actual max, round to 2 sig figs
+      const headroom = actualMax * 1.5
+      const magnitude = Math.pow(10, Math.floor(Math.log10(headroom)) - 1)
+      const newSliderMax = Math.ceil(headroom / magnitude) * magnitude
+      setSliderMax(newSliderMax)
+      // Default threshold: show top ~30% of edges (threshold at 70% of max)
+      setThreshold(parseFloat((actualMax * 0.7).toPrecision(2)))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to compute composition scores')
     } finally {
@@ -285,12 +302,22 @@ export default function CircuitAnalyzer() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
                 <span style={label11}>threshold</span>
                 <input
-                  type="range" min={0.01} max={0.5} step={0.01}
+                  type="range"
+                  min={0}
+                  max={sliderMax}
+                  step={parseFloat((sliderMax / 200).toPrecision(1))}
                   value={threshold}
                   onChange={e => setThreshold(parseFloat(e.target.value))}
                   style={{ width: 120, accentColor: '#00d4ff' }}
                 />
-                <span style={{ ...label11, color: '#00d4ff', minWidth: 34 }}>{threshold.toFixed(2)}</span>
+                <span style={{ ...label11, color: '#00d4ff', minWidth: 42 }}>
+                  {threshold < 0.01 ? threshold.toFixed(4) : threshold.toFixed(3)}
+                </span>
+                {scoreMax !== null && (
+                  <span style={{ ...label11, color: 'rgba(255,255,255,0.25)', fontSize: 9 }}>
+                    max {scoreMax.toFixed(3)}
+                  </span>
+                )}
                 <span style={{ ...label11, color: 'rgba(255,255,255,0.3)' }}>
                   {edgeCount} edges
                 </span>
