@@ -1,8 +1,46 @@
 import { useState, useMemo } from 'react'
 import axios from 'axios'
-import Plot from 'react-plotly.js'
+import _PlotLib from 'react-plotly.js'
+const Plot = ((_PlotLib as any).default ?? _PlotLib) as any
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const API = ''
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Attribution measures how much each attention head or layer contributes to the model\'s logit score for a specific answer token. ' +
+    'It uses the gradient of the answer-token logit with respect to each component\'s output, then takes a dot product with the actual output. ' +
+    'Positive scores (warm colours) push the model toward the answer; negative scores push away. ' +
+    'Three modes: Full (all components combined), By Layer (one score per layer), By Head (12×12 head grid). ' +
+    'The bar chart shows the top contributing components at the selected token position.',
+  example: {
+    prompt: 'Run run_with_cache on "The Eiffel Tower is in", then run Attribution with answer token " Paris", mode = By Head.',
+    output:
+      'Top contributors at pos 4 (" in"):\n' +
+      '  L9H6:  +2.14  (strongest positive)\n' +
+      '  L11H3: +1.87\n' +
+      '  L10H7: +1.22\n' +
+      '  L2H4:  -0.93  (suppresses " Paris")',
+    interpretation:
+      'L9H6 being the top positive contributor is consistent with logit lens showing emergence at L9.\n' +
+      'These heads are likely query-key routing the location fact " Paris" toward the output.\n' +
+      'Negative scores (like L2H4) are inhibitory heads — they suppress the target token,\n' +
+      'possibly to prevent premature or incorrect predictions in earlier positions.\n' +
+      'Sum of all scores ≈ final logit difference for " Paris" minus baseline.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface AttributionResponse {
   scores: number[][]       // [n_components, n_pos]
@@ -39,6 +77,7 @@ export default function Attribution() {
   const [data, setData] = useState<AttributionResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const run = async () => {
     setLoading(true)
@@ -130,6 +169,7 @@ export default function Attribution() {
         <span style={{ fontSize: 14, fontWeight: 600, color: '#00d4ff', fontFamily: 'JetBrains Mono, monospace' }}>
           Attribution Analyzer
         </span>
+        <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
         <span style={{
           fontSize: 9,
           padding: '2px 7px',
@@ -358,6 +398,19 @@ export default function Attribution() {
           </div>
         )
       )}
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Attribution Analyzer"
+        pageType="attribution"
+        guide={GUIDE}
+        liveData={data ? {
+          answer_token_str: data.answer_token_str,
+          mode: data.mode,
+          str_tokens: data.str_tokens,
+          top_contribs: topContribs,
+        } : null}
+      />
     </div>
   )
 }

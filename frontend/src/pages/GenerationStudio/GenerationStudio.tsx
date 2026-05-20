@@ -1,6 +1,44 @@
 import { useState, useRef, useCallback } from 'react'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const WS_URL = `ws://${window.location.host}/ws/generate`
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Generation Studio streams autoregressive token generation over WebSocket, capturing live activations at each step. ' +
+    'Each generated token appears on the timeline — brightness reflects the token\'s log-probability (brighter = model was more confident). ' +
+    'Click any token in the timeline to "scrub" to that step and see the activation snapshot at that exact generation step. ' +
+    'Add monitor hook names to track specific activations (mean, max, min) across generation. ' +
+    'Temperature controls randomness (0.0 = greedy, 1.0 = default, >1 = more random). Top-k limits candidates per step.',
+  example: {
+    prompt: 'Prompt: "When Mary and John went to the store, John gave a book to"\nMax tokens: 10, temperature: 1.0',
+    output:
+      'Step 1: " Mary"   logprob: -0.23  (bright — high confidence)\n' +
+      'Step 2: ","       logprob: -0.41\n' +
+      'Step 3: " and"    logprob: -0.55\n' +
+      '...\n' +
+      'Monitor blocks.9.hook_resid_post: mean=0.12, max=2.4 at step 1',
+    interpretation:
+      'Step 1 generating " Mary" with logprob -0.23 confirms the IOI circuit is working:\n' +
+      'the model correctly identifies the indirect object in one step.\n' +
+      'A token with logprob < -3 (dim chip) signals low-confidence generation — worth inspecting\n' +
+      'the activation at that step to see if any monitored hook shows an unusual pattern.\n' +
+      'Scrubbing to step 1 and checking blocks.9.hook_resid_post mean reveals\n' +
+      'whether the name-mover heads are active at the prediction step.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface GeneratedToken {
   token: string
@@ -69,6 +107,7 @@ export default function GenerationStudio() {
   const [tokens, setTokens] = useState<GeneratedToken[]>([])
   const [scrubStep, setScrubStep] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
 
@@ -126,8 +165,11 @@ export default function GenerationStudio() {
 
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#00d4ff', letterSpacing: '0.05em' }}>
-              Generation Studio
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#00d4ff', letterSpacing: '0.05em' }}>
+                Generation Studio
+              </div>
+              <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read</button>
             </div>
             {tokens.length > 0 && (
               <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,212,255,0.12)', color: '#00d4ff' }}>
@@ -403,6 +445,19 @@ export default function GenerationStudio() {
       <style>{`
         @keyframes blink { 0%,100%{opacity:0.8} 50%{opacity:0} }
       `}</style>
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Generation Studio"
+        pageType="generation-studio"
+        guide={GUIDE}
+        liveData={tokens.length > 0 ? {
+          prompt,
+          temperature,
+          top_k: topK,
+          tokens: tokens.map(t => ({ token: t.token, logprob: t.logprob, step: t.step, top_tokens: t.top_tokens.slice(0, 3) })),
+        } : null}
+      />
     </div>
   )
 }

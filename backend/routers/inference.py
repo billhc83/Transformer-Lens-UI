@@ -77,7 +77,7 @@ async def forward_endpoint(request: ForwardRequest):
         top_k_entries = []
         for tk_id in top_k_indices:
             tk_id_int = int(tk_id)
-            tk_str = model.tokenizer.convert_ids_to_tokens(tk_id_int) or str(tk_id_int)
+            tk_str = model.tokenizer.decode([tk_id_int])
             top_k_entries.append({
                 "token_id": tk_id_int,
                 "token_str": tk_str,

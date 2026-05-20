@@ -1,6 +1,44 @@
 import { useState } from 'react'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const CHIP_COLORS = ['#00d4ff', '#a855f7', '#14b8a6', '#ec4899', '#f97316']
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Token Inspector converts raw text into the discrete tokens a transformer actually processes. ' +
+    'Each coloured chip represents one token — the atomic unit the model reads. ' +
+    'Hover a chip to see its numeric token ID and sequence position. ' +
+    'Token boundaries are model-specific (GPT-2 uses BPE): common words are single tokens, rare words split into sub-words. ' +
+    'A leading space character (· ) is part of the token — " Paris" (ID 6342) and "Paris" (ID 40313) are different tokens with different model representations.',
+  example: {
+    prompt: '"The Eiffel Tower is in"',
+    output:
+      '6 tokens\n' +
+      'Pos 0 → "The"     (ID 464)\n' +
+      'Pos 1 → " Eiffel" (ID 15389)\n' +
+      'Pos 2 → " Tower"  (ID 10580)\n' +
+      'Pos 3 → " is"     (ID 318)\n' +
+      'Pos 4 → " in"     (ID 287)',
+    interpretation:
+      '"Eiffel" and "Tower" each get their own token — common enough in GPT-2\'s vocabulary.\n' +
+      'Every content word has a leading space baked in (e.g. " Eiffel").\n' +
+      'The model will predict the token at position 5, which should be " Paris" (ID 6342).\n' +
+      'If a rare proper noun split into sub-words (e.g. "Ei", "ff", "el"), that would\n' +
+      'hint at lower model familiarity and typically weaker next-token confidence.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface TokenizeResponse {
   token_ids: number[]
@@ -14,6 +52,7 @@ export default function TokenInspector() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   async function tokenize() {
     setLoading(true)
@@ -43,7 +82,10 @@ export default function TokenInspector() {
     <div style={{ flex: 1, overflow: 'auto', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header */}
       <div>
-        <div style={{ fontSize: '16px', fontWeight: 600, color: '#00d4ff', marginBottom: '4px' }}>Token Inspector</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '4px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#00d4ff' }}>Token Inspector</div>
+          <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
+        </div>
         <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>Tokenize text and inspect token IDs</div>
       </div>
 
@@ -195,6 +237,14 @@ export default function TokenInspector() {
           </div>
         </div>
       )}
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Token Inspector"
+        pageType="token-inspector"
+        guide={GUIDE}
+        liveData={result as Record<string, unknown> | null}
+      />
     </div>
   )
 }

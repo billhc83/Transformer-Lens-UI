@@ -9,6 +9,8 @@ interface Props {
   keys: KeyEntry[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  compareMode?: boolean;
+  pinnedKeys?: string[];
 }
 
 function getGroup(key: string): string {
@@ -22,7 +24,7 @@ function getGroup(key: string): string {
   return 'misc';
 }
 
-const HookTree: React.FC<Props> = ({ keys, selectedKey, onSelect }) => {
+const HookTree: React.FC<Props> = ({ keys, selectedKey, onSelect, compareMode = false, pinnedKeys = [] }) => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (group: string) => {
@@ -60,24 +62,37 @@ const HookTree: React.FC<Props> = ({ keys, selectedKey, onSelect }) => {
             <span>{group}</span>
             <span style={{ fontSize: 10, opacity: 0.6 }}>{expanded.has(group) ? '▼' : '▶'} {groups[group].length}</span>
           </div>
-          {expanded.has(group) && groups[group].map(entry => (
-            <div
-              key={entry.key}
-              onClick={() => onSelect(entry.key)}
-              style={{
-                padding: '2px 8px 2px 20px',
-                cursor: 'pointer',
-                fontSize: 12,
-                background: selectedKey === entry.key ? 'rgba(0,212,255,0.1)' : 'transparent',
-                borderLeft: selectedKey === entry.key ? '3px solid #00d4ff' : '3px solid transparent',
-              }}
-            >
-              <span>{entry.key.split('.').slice(2).join('.')}</span>
-              <span style={{ color: '#666', marginLeft: 8, fontSize: 11 }}>
-                [{entry.shape.join('×')}]
-              </span>
-            </div>
-          ))}
+          {expanded.has(group) && groups[group].map(entry => {
+            const isPinned = compareMode && pinnedKeys.includes(entry.key);
+            const isSelected = !compareMode && selectedKey === entry.key;
+            const isActive = isPinned || isSelected;
+            return (
+              <div
+                key={entry.key}
+                onClick={() => onSelect(entry.key)}
+                style={{
+                  padding: '2px 8px 2px 20px',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: isActive ? 'rgba(0,212,255,0.1)' : 'transparent',
+                  borderLeft: isActive ? '3px solid #00d4ff' : '3px solid transparent',
+                }}
+              >
+                {compareMode && (
+                  <span style={{ fontSize: 10, color: isPinned ? '#00d4ff' : '#444', flexShrink: 0, width: 12 }}>
+                    {isPinned ? '✓' : '○'}
+                  </span>
+                )}
+                <span>{entry.key.split('.').slice(2).join('.')}</span>
+                <span style={{ color: '#666', marginLeft: 4, fontSize: 11 }}>
+                  [{entry.shape.join('×')}]
+                </span>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

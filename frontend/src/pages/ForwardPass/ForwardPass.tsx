@@ -1,6 +1,45 @@
 import { useState } from 'react'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const CHIP_COLORS = ['#00d4ff', '#a855f7', '#14b8a6', '#ec4899', '#f97316']
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Forward Pass runs your prompt through the full model and shows what token the model predicts at each position. ' +
+    'Click any token chip to see its prediction distribution: a probability bar chart over the top-10 candidates. ' +
+    'The bar represents softmax probability (0–100%), normalised across the full vocabulary (~50k tokens). ' +
+    'The last position is the most meaningful — that\'s where the model predicts the next word given everything before it. ' +
+    'Logit shape [batch × seq × d_vocab] tells you the raw tensor dimensions before softmax is applied.',
+  example: {
+    prompt: '"The Eiffel Tower is in"',
+    output:
+      'logits shape: [1 × 5 × 50257]\n' +
+      'Position 4 (" in") — top 5 predictions:\n' +
+      '  " Paris"    → 18.4%\n' +
+      '  " France"   →  9.1%\n' +
+      '  " the"      →  6.7%\n' +
+      '  " a"        →  4.2%\n' +
+      '  " Europe"   →  3.8%',
+    interpretation:
+      '" Paris" is rank 1 with 18.4% probability — strong but not overwhelming.\n' +
+      'The model spreads probability mass across plausible completions (" France", " the").\n' +
+      'A sharper peak (e.g. >50%) would mean the model is very confident.\n' +
+      'Positions 0–3 predict the *next* token in sequence, not the current one —\n' +
+      'position 3 (" is") predicts " in", which is correct.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface TopKEntry {
   token_id: number
@@ -27,6 +66,7 @@ export default function ForwardPass() {
   const [selectedPos, setSelectedPos] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   async function runForward() {
     setLoading(true)
@@ -60,7 +100,10 @@ export default function ForwardPass() {
     <div style={{ flex: 1, overflow: 'auto', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header */}
       <div>
-        <div style={{ fontSize: '16px', fontWeight: 600, color: '#00d4ff', marginBottom: '4px' }}>Forward Pass</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '4px' }}>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#00d4ff' }}>Forward Pass</div>
+          <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
+        </div>
         <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>Run a forward pass and inspect top predictions per position</div>
       </div>
 
@@ -262,6 +305,18 @@ export default function ForwardPass() {
           </div>
         </div>
       )}
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Forward Pass"
+        pageType="forward-pass"
+        guide={GUIDE}
+        liveData={result ? {
+          str_tokens: result.str_tokens,
+          logits_shape: result.logits_shape,
+          predictions: result.predictions.map(p => ({ position: p.position, token: p.token, top_k: p.top_k.slice(0, 5) })),
+        } : null}
+      />
     </div>
   )
 }

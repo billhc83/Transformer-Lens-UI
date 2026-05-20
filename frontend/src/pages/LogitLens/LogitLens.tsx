@@ -1,7 +1,45 @@
 import { useState, useMemo } from 'react'
 import axios from 'axios'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const API = ''
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Logit Lens unembeds the residual stream at the output of each layer — giving you a "prediction" at every depth of the model, ' +
+    'not just the final layer. ' +
+    'Each row is a layer (0 = earliest, final = output). Each column is a sequence position. ' +
+    'The chip in each cell is the top-1 predicted token at that layer, with its probability. ' +
+    'A green ✦ EMERGES badge marks the first layer where the correct answer breaks through above a 5% threshold. ' +
+    'Early layers predict grammatical fillers ("the", "a"); the correct semantic answer crystallises in mid-to-late layers.',
+  example: {
+    prompt: 'Run run_with_cache on "The Eiffel Tower is in", then click Run Logit Lens. Select position 4 (" in").',
+    output:
+      'Layer 0:  "the"     0.8%\n' +
+      'Layer 3:  "the"     1.2%\n' +
+      'Layer 6:  "France"  3.1%\n' +
+      'Layer 9:  "Paris"   7.4%  ✦ EMERGES\n' +
+      'Layer 11: "Paris"  18.4%',
+    interpretation:
+      'Layers 0–8 predict function words — the model hasn\'t yet located the fact.\n' +
+      'At layer 9, " Paris" crosses 5% — this is where geographic knowledge enters the residual stream.\n' +
+      'The green ✦ badge highlights this emergence point.\n' +
+      'Layers 9–11 refine confidence from 7% to 18%.\n' +
+      'This tells you the factual recall happens in the L9 MLP block, not in attention.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface TokenPred { token_id: number; token_str: string; probability: number }
 interface PosPreds { position: number; top_k: TokenPred[] }
@@ -131,6 +169,7 @@ export default function LogitLens() {
   const [data, setData] = useState<LensResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const run = async () => {
     setLoading(true)
@@ -177,6 +216,7 @@ export default function LogitLens() {
         <span style={{ fontSize: 14, fontWeight: 600, color: '#00d4ff', fontFamily: 'JetBrains Mono, monospace' }}>
           Logit Lens
         </span>
+        <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
         <span style={{
           fontSize: 9,
           padding: '2px 7px',
@@ -300,6 +340,24 @@ export default function LogitLens() {
           </div>
         )
       )}
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Logit Lens"
+        pageType="logit-lens"
+        guide={GUIDE}
+        liveData={data ? {
+          str_tokens: data.str_tokens,
+          n_layers: data.n_layers,
+          target_pos: targetPos,
+          emergence_layer: firstHitLayer,
+          results: data.results.map(r => ({
+            layer: r.layer,
+            label: r.label,
+            predictions: r.predictions.filter(p => p.position === targetPos).map(p => ({ position: p.position, top_k: p.top_k.slice(0, 3) })),
+          })),
+        } : null}
+      />
     </div>
   )
 }

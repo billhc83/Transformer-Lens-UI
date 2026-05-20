@@ -1,8 +1,46 @@
 import { useState, useCallback } from 'react'
 import axios from 'axios'
 import AttentionHeatmap from '../../components/viz/AttentionHeatmap'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const API = ''
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Attention Viz shows the attention weight matrix for every head in a transformer layer. ' +
+    'Each cell [row i, col j] is the attention weight head h assigns to token j when processing token i. ' +
+    'Rows sum to 1.0 (softmax). ' +
+    'Bright = high attention, dark = near-zero. ' +
+    'Different heads specialise: some attend to previous tokens (previous-token heads), some copy subject tokens (duplicate-token heads), ' +
+    'some attend to punctuation or the [BOS] token. ' +
+    'Use the layer slider to step through layers 0–11 and the head grid to zoom into a single head.',
+  example: {
+    prompt: 'Layer 5, IOI prompt "When Mary and John went to the store, John gave a book to"',
+    output:
+      '12 heads, 8×8 attention matrix per head\n' +
+      'Head 5,1: strong diagonal (each token attends to itself)\n' +
+      'Head 5,5: " John" (pos 2) attends heavily to " Mary" (pos 1)\n' +
+      'Head 5,9: most tokens attend to pos 0 (BOS token)',
+    interpretation:
+      'Head 5,5 exhibiting cross-name attention is consistent with a "subject-mover" head.\n' +
+      'BOS-attending heads (like 5,9) act as a null/no-op signal — the model routes attention\n' +
+      'there when it doesn\'t need information from the context.\n' +
+      'Diagonal heads are induction-adjacent: they copy the current token\'s own representation\n' +
+      'forward, providing a residual shortcut through the layer.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 const panel: React.CSSProperties = {
   background: 'rgba(255,255,255,0.03)',
@@ -47,6 +85,7 @@ export default function AttentionViz() {
   const [selectedHead, setSelectedHead] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const fetchLayer = useCallback(async (l: number) => {
     setLoading(true)
@@ -92,6 +131,7 @@ export default function AttentionViz() {
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: 1 }}>Attention Patterns</span>
+        <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Layer</span>
@@ -218,6 +258,14 @@ export default function AttentionViz() {
           />
         </div>
       )}
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Attention Viz"
+        pageType="attention-viz"
+        guide={GUIDE}
+        liveData={patterns ? { layer, str_tokens: strTokens, patterns } : null}
+      />
     </div>
   )
 }

@@ -1,8 +1,45 @@
 import { useState } from 'react'
 import axios from 'axios'
-import Plot from 'react-plotly.js'
+import _PlotLib from 'react-plotly.js'
+const Plot = ((_PlotLib as any).default ?? _PlotLib) as any
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const API = ''
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Patching Lab performs activation patching — a causal intervention technique. ' +
+    'You run two prompts: a "clean" prompt (correct answer) and a "corrupted" prompt (wrong answer). ' +
+    'The model is run on the corrupted prompt, but at each layer×position, the activation is replaced with the clean run\'s activation. ' +
+    'The heatmap shows how much each patch moves the logit score toward the clean answer (normalised 0→1). ' +
+    'Bright cells = patching that location causally restores the clean behaviour — this is where the information lives. ' +
+    'Three activation types: Residual Stream, Attention Output, MLP Output.',
+  example: {
+    prompt: 'Clean: "When Mary and John went to the store, John gave a drink to"\nCorrupted: "When John and Mary went to the store, John gave a drink to"',
+    output:
+      'clean_diff: 3.362  (model strongly prefers " Mary" on clean)\n' +
+      'corrupted_diff: -1.8  (model prefers " John" on corrupted)\n' +
+      'mlp_out heatmap: bright cell at L0, pos 10 (" John")\n' +
+      'attn_out: moderate brightness at L5–L9',
+    interpretation:
+      'The L0 MLP at position 10 (" John") being the top patch site means the model stores\n' +
+      '"which name appears here" at this exact location in the very first layer.\n' +
+      'Attention layers 5–9 distribute that information to the final position for the prediction.\n' +
+      'This matches the known IOI circuit: early MLP encodes the IO name, mid-layer attention routes it.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface PatchingResponse {
   results: Record<string, number[][]>
@@ -50,6 +87,7 @@ export default function PatchingLab() {
   const [data, setData] = useState<PatchingResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const toggleType = (id: string) => {
     setSelectedTypes(prev =>
@@ -116,6 +154,7 @@ export default function PatchingLab() {
         <span style={{ fontSize: 14, fontWeight: 600, color: '#00d4ff', fontFamily: 'JetBrains Mono, monospace' }}>
           Patching Lab
         </span>
+        <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
         <span style={{
           fontSize: 9,
           padding: '2px 7px',
@@ -310,6 +349,23 @@ export default function PatchingLab() {
           ))}
         </div>
       )}
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Patching Lab"
+        pageType="patching-lab"
+        guide={GUIDE}
+        liveData={data ? {
+          clean_prompt: cleanPrompt,
+          corrupted_prompt: corruptedPrompt,
+          answer_token: data.answer_token,
+          baseline_token: data.baseline_token,
+          clean_diff: data.clean_diff,
+          corrupted_diff: data.corrupted_diff,
+          str_tokens: data.str_tokens,
+          results: data.results,
+        } : null}
+      />
     </div>
   )
 }

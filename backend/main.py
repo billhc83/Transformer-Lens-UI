@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import models, inference, activations, patching, circuits, hooks
+from backend.routers import models, inference, activations, patching, circuits, hooks, explain
 from backend.ws import generation as ws_generation
 
 app = FastAPI(title="TransformerLens UI", version="0.1.0")
@@ -20,6 +20,7 @@ app.include_router(activations.router)
 app.include_router(patching.router)
 app.include_router(circuits.router)
 app.include_router(hooks.router)
+app.include_router(explain.router)
 app.include_router(ws_generation.router)
 
 

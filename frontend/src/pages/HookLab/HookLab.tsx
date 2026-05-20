@@ -1,7 +1,42 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const API = ''
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Hook Lab lets you write Python hook functions that intercept and modify activations at any hook point during a forward pass. ' +
+    'Choose a hook point (e.g. blocks.5.attn.hook_z), write a hook function, then click Preview to compare ' +
+    '"Baseline" (no hooks) vs "Modified" (with your hook) top predictions. ' +
+    'Zero ablation sets the activation to zero — the model must predict without that information. ' +
+    'Mean ablation replaces with the dataset mean. ' +
+    'Hooks are additive: you can stack multiple on different hook points to compose interventions.',
+  example: {
+    prompt: 'Hook: blocks.5.attn.hook_z, zero ablation\nPrompt: "The Eiffel Tower is in"',
+    output:
+      'Baseline top-1:  " Paris"   18.4%\n' +
+      'Modified top-1:  " the"      9.2%\n' +
+      'DiffSummary: Top prediction changed: " Paris" → " the"',
+    interpretation:
+      'Zeroing blocks.5.attn.hook_z (all heads in layer 5) drops " Paris" from top-1 to outside the top 5.\n' +
+      'This tells you that layer 5 attention contributes causally to the Paris prediction.\n' +
+      'To isolate which head, ablate heads one at a time (set hook_z[:, :, HEAD, :] = 0 in your fn).\n' +
+      'If ablating a head has no effect, it\'s not part of the circuit for this prompt.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 const TEMPLATES = [
   {
@@ -83,11 +118,18 @@ export default function HookLab() {
   const [baseline, setBaseline] = useState<PredEntry[]>([])
   const [modified, setModified] = useState<PredEntry[]>([])
   const [strTokens, setStrTokens] = useState<string[]>([])
+  const [hookPoints, setHookPoints] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [guideOpen, setGuideOpen] = useState(false)
 
   useEffect(() => {
     axios.get(`${API}/api/hooks`).then(r => setActiveHooks(r.data.hooks)).catch(() => {})
+    axios.get(`${API}/api/hooks/hook-points`).then(r => {
+      const pts: string[] = r.data.hook_points
+      setHookPoints(pts)
+      if (pts.length > 0 && !pts.includes(hookName)) setHookName(pts[0])
+    }).catch(() => {})
   }, [])
 
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -144,7 +186,10 @@ export default function HookLab() {
 
         {/* header */}
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#00d4ff', letterSpacing: '0.05em' }}>Hook Lab</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#00d4ff', letterSpacing: '0.05em' }}>Hook Lab</div>
+            <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
+          </div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
             Write Python hook functions and apply them to any hook point.
           </div>
@@ -182,19 +227,28 @@ export default function HookLab() {
           </div>
         </div>
 
-        {/* hook point filter */}
+        {/* hook point selector */}
         <div style={panel}>
           <span style={label}>Hook Point</span>
-          <input
-            type="text"
-            value={hookName}
-            onChange={e => setHookName(e.target.value)}
-            placeholder="blocks.5.attn.hook_z"
-            style={input}
-          />
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 6 }}>
-            Exact hook name (e.g. blocks.5.attn.hook_z, hook_embed, blocks.0.mlp.hook_post)
-          </div>
+          {hookPoints.length === 0 ? (
+            <input
+              type="text"
+              value={hookName}
+              onChange={e => setHookName(e.target.value)}
+              placeholder="blocks.5.attn.hook_z"
+              style={input}
+            />
+          ) : (
+            <select
+              value={hookName}
+              onChange={e => setHookName(e.target.value)}
+              style={{ ...input, cursor: 'pointer' }}
+            >
+              {hookPoints.map(hp => (
+                <option key={hp} value={hp}>{hp}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* add button */}
@@ -292,6 +346,21 @@ export default function HookLab() {
           <DiffSummary baseline={baseline} modified={modified} />
         )}
       </div>
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Hook Lab"
+        pageType="hook-lab"
+        guide={GUIDE}
+        liveData={baseline.length > 0 ? {
+          hook_name: hookName,
+          hook_code: hookCode,
+          baseline,
+          modified,
+          str_tokens: strTokens,
+          changed: baseline[0]?.token !== modified[0]?.token,
+        } : null}
+      />
     </div>
   )
 }

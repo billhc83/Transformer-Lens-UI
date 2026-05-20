@@ -117,6 +117,14 @@ async def list_hooks():
     return {"hooks": hook_registry.list_hooks()}
 
 
+@router.get("/hook-points")
+async def list_hook_points():
+    model = model_manager.model
+    if model is None:
+        raise HTTPException(status_code=400, detail="No model loaded")
+    return {"hook_points": list(model.hook_dict.keys())}
+
+
 @router.post("/preview")
 async def preview_hooks(request: PreviewRequest):
     model = model_manager.model

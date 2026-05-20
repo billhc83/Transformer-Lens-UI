@@ -1,9 +1,49 @@
 import { useState, useCallback } from 'react'
 import axios from 'axios'
-import Plot from 'react-plotly.js'
+import _PlotLib from 'react-plotly.js'
+const Plot = ((_PlotLib as any).default ?? _PlotLib) as any
 import CircuitGraph from '../../components/viz/CircuitGraph'
+import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
 
 const API = ''
+
+const GUIDE: InterpretationGuide = {
+  overview:
+    'Circuit Analyzer computes composition scores between every pair of attention heads — how much head B uses the output of head A as its input. ' +
+    'Three composition types: Q-composition (head B\'s queries use A\'s output), K-composition (B\'s keys), V-composition (B\'s values). ' +
+    'High score = strong compositional relationship = a circuit edge. ' +
+    'The node graph visualises the top edges above a tunable threshold. ' +
+    'Click a node to see the QK and OV matrix decompositions for that head (singular value spectra).',
+  example: {
+    prompt: 'Load head info + compute composition scores (default threshold 0.05)',
+    output:
+      'Top K-composition scores:\n' +
+      '  L1H8 → L9H6:  0.341  (strong)\n' +
+      '  L0H3 → L5H5:  0.189\n' +
+      'Top Q-composition:\n' +
+      '  L2H2 → L10H7: 0.127\n' +
+      'OV spectrum for L9H6: singular values [0.42, 0.38, 0.21, ...]',
+    interpretation:
+      'L1H8 → L9H6 via K-composition: L9H6\'s keys are shaped by L1H8\'s output.\n' +
+      'This is a hallmark of the induction circuit: L1H8 is an induction head that\n' +
+      'K-composes with later name-mover heads.\n' +
+      'A flat OV singular value spectrum means the head copies uniformly across many directions.\n' +
+      'A peaked spectrum (one dominant singular value) means the head is a specialised mover\n' +
+      'for a narrow set of features.',
+  },
+}
+
+const GUIDE_BTN: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 10px',
+  borderRadius: 6,
+  border: '1px solid rgba(0,212,255,0.4)',
+  background: 'transparent',
+  color: '#00d4ff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  letterSpacing: '0.04em',
+}
 
 interface HeadLabelsResponse {
   labels: string[]
@@ -103,6 +143,14 @@ function SvdBars({
   )
 }
 
+function getTopEdges(matrix: number[][], labels: string[], n: number) {
+  const edges: { src: string; dst: string; score: number }[] = []
+  for (let i = 0; i < matrix.length; i++)
+    for (let j = 0; j < (matrix[i]?.length ?? 0); j++)
+      edges.push({ src: labels[i] ?? `${i}`, dst: labels[j] ?? `${j}`, score: matrix[i][j] })
+  return edges.sort((a, b) => b.score - a.score).slice(0, n)
+}
+
 export default function CircuitAnalyzer() {
   const [info, setInfo] = useState<HeadLabelsResponse | null>(null)
   const [scores, setScores] = useState<CompositionResponse | null>(null)
@@ -113,6 +161,7 @@ export default function CircuitAnalyzer() {
   const [loadingInfo, setLoadingInfo] = useState(false)
   const [loadingScores, setLoadingScores] = useState(false)
   const [loadingHead, setLoadingHead] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const fetchInfo = async () => {
@@ -181,8 +230,11 @@ export default function CircuitAnalyzer() {
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#00d4ff', letterSpacing: '0.05em' }}>
-            Circuit Analyzer
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#00d4ff', letterSpacing: '0.05em' }}>
+              Circuit Analyzer
+            </div>
+            <button style={GUIDE_BTN} onClick={() => setGuideOpen(true)}>? How to read this</button>
           </div>
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
             QK / OV composition scores · head node graph
@@ -404,6 +456,24 @@ export default function CircuitAnalyzer() {
           })()}
         </div>
       </div>
+      <InterpretationModal
+        isOpen={guideOpen}
+        onClose={() => setGuideOpen(false)}
+        pageTitle="Circuit Analyzer"
+        pageType="circuit-analyzer"
+        guide={GUIDE}
+        liveData={scores && info ? {
+          labels: info.labels,
+          n_layers: info.n_layers,
+          n_heads: info.n_heads,
+          top_k_edges: getTopEdges(scores.k_scores, info.labels, 10),
+          top_q_edges: getTopEdges(scores.q_scores, info.labels, 10),
+          top_v_edges: getTopEdges(scores.v_scores, info.labels, 10),
+          selected_node: selectedNode,
+          qk_data: qkData ? { S_Q: qkData.S_Q.slice(0, 10), S_K: qkData.S_K.slice(0, 10) } : null,
+          ov_data: ovData ? { S_V: ovData.S_V.slice(0, 10), S_O: ovData.S_O.slice(0, 10) } : null,
+        } : null}
+      />
     </div>
   )
 }
