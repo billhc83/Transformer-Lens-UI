@@ -105,7 +105,10 @@ function LayerRow({
       borderLeft: isFirst ? '3px solid #4ade80' : '3px solid transparent',
       paddingLeft: 8,
     }}>
-      <div style={{ width: 120, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{
+        width: 120, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
+        position: 'sticky', left: 0, background: '#0a0a0f', zIndex: 1,
+      }}>
         <span style={{
           width: 52,
           flexShrink: 0,
@@ -129,7 +132,7 @@ function LayerRow({
         }}>✦ EMERGES</span>
       </div>
 
-      <div style={{ display: 'flex', gap: 3, flexWrap: 'nowrap', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 3, flexWrap: 'nowrap' }}>
         {strTokens.map((tok, colIdx) => {
           const absPos = positionOffset + colIdx
           const posPred = result.predictions.find(p => p.position === absPos)
@@ -358,50 +361,49 @@ export default function LogitLens() {
           </div>
         )}
 
-        {/* Input column headers */}
+        {/* Input column headers + layer rows — shared horizontal scroll */}
         {data && (
-          <div style={{ padding: '4px 20px', display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-            <span style={{ width: 120, flexShrink: 0 }} />
-            {data.str_tokens.map((t, i) => (
-              <span key={i} style={{
-                fontSize: 9,
-                fontFamily: 'JetBrains Mono, monospace',
-                color: i === targetPos ? '#a855f7' : 'rgba(255,255,255,0.2)',
-                background: i === targetPos ? 'rgba(168,85,247,0.1)' : 'transparent',
-                border: i === targetPos ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
-                borderRadius: 3,
-                padding: '1px 4px',
-                width: i === targetPos ? cellWidth + 20 : cellWidth,
-                flexShrink: 0,
-                textAlign: 'center',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                boxSizing: 'border-box',
-              }}>
-                {t.slice(0, 8)}
-              </span>
-            ))}
+          <div style={{ overflowX: 'auto', flexShrink: 0 }}>
+            <div style={{ padding: '4px 20px', display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', minWidth: 'max-content' }}>
+              <span style={{ width: 128, flexShrink: 0 }} />
+              {data.str_tokens.map((t, i) => (
+                <span key={i} style={{
+                  fontSize: 9,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  color: i === targetPos ? '#a855f7' : 'rgba(255,255,255,0.2)',
+                  background: i === targetPos ? 'rgba(168,85,247,0.1)' : 'transparent',
+                  border: i === targetPos ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
+                  borderRadius: 3,
+                  padding: '1px 4px',
+                  width: i === targetPos ? cellWidth + 20 : cellWidth,
+                  flexShrink: 0,
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  boxSizing: 'border-box',
+                }}>
+                  {t.slice(0, 8)}
+                </span>
+              ))}
+            </div>
+            <div style={{ padding: '4px 20px 12px', minWidth: 'max-content' }}>
+              {data.results.map(lr => (
+                <LayerRow
+                  key={lr.layer}
+                  result={lr}
+                  targetPos={targetPos}
+                  firstHitLayer={firstHitLayer}
+                  strTokens={data.str_tokens}
+                  cellWidth={cellWidth}
+                  accent="#a855f7"
+                  positionOffset={0}
+                />
+              ))}
+            </div>
           </div>
         )}
-
-        {/* Input layer rows */}
-        {data ? (
-          <div style={{ padding: '4px 20px 12px', flexShrink: 0 }}>
-            {data.results.map(lr => (
-              <LayerRow
-                key={lr.layer}
-                result={lr}
-                targetPos={targetPos}
-                firstHitLayer={firstHitLayer}
-                strTokens={data.str_tokens}
-                cellWidth={cellWidth}
-                accent="#a855f7"
-                positionOffset={0}
-              />
-            ))}
-          </div>
-        ) : (
+        {!data && (
           !loading && (
             <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ ...panel, textAlign: 'center', maxWidth: 360 }}>
@@ -498,50 +500,49 @@ export default function LogitLens() {
           </div>
         )}
 
-        {/* Generated token column headers */}
+        {/* Generated token column headers + layer rows — shared horizontal scroll */}
         {genData && genTokens.length > 0 && (
-          <div style={{ padding: '4px 20px', display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-            <span style={{ width: 120, flexShrink: 0 }} />
-            {genTokens.map((t, i) => (
-              <span key={i} style={{
-                fontSize: 9,
-                fontFamily: 'JetBrains Mono, monospace',
-                color: i === genTargetPos ? '#f59e0b' : 'rgba(255,255,255,0.2)',
-                background: i === genTargetPos ? 'rgba(245,158,11,0.1)' : 'transparent',
-                border: i === genTargetPos ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent',
-                borderRadius: 3,
-                padding: '1px 4px',
-                width: i === genTargetPos ? genCellWidth + 20 : genCellWidth,
-                flexShrink: 0,
-                textAlign: 'center',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                boxSizing: 'border-box',
-              }}>
-                {t.slice(0, 8)}
-              </span>
-            ))}
+          <div style={{ overflowX: 'auto', flexShrink: 0 }}>
+            <div style={{ padding: '4px 20px', display: 'flex', gap: 4, alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.04)', minWidth: 'max-content' }}>
+              <span style={{ width: 128, flexShrink: 0 }} />
+              {genTokens.map((t, i) => (
+                <span key={i} style={{
+                  fontSize: 9,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  color: i === genTargetPos ? '#f59e0b' : 'rgba(255,255,255,0.2)',
+                  background: i === genTargetPos ? 'rgba(245,158,11,0.1)' : 'transparent',
+                  border: i === genTargetPos ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent',
+                  borderRadius: 3,
+                  padding: '1px 4px',
+                  width: i === genTargetPos ? genCellWidth + 20 : genCellWidth,
+                  flexShrink: 0,
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  boxSizing: 'border-box',
+                }}>
+                  {t.slice(0, 8)}
+                </span>
+              ))}
+            </div>
+            <div style={{ padding: '4px 20px 20px', minWidth: 'max-content' }}>
+              {genData.results.map(lr => (
+                <LayerRow
+                  key={lr.layer}
+                  result={lr}
+                  targetPos={genTargetPos}
+                  firstHitLayer={genFirstHitLayer}
+                  strTokens={genTokens}
+                  cellWidth={genCellWidth}
+                  accent="#f59e0b"
+                  positionOffset={genPositionOffset}
+                />
+              ))}
+            </div>
           </div>
         )}
-
-        {/* Generated layer rows */}
-        {genData && genTokens.length > 0 ? (
-          <div style={{ padding: '4px 20px 20px', flexShrink: 0 }}>
-            {genData.results.map(lr => (
-              <LayerRow
-                key={lr.layer}
-                result={lr}
-                targetPos={genTargetPos}
-                firstHitLayer={genFirstHitLayer}
-                strTokens={genTokens}
-                cellWidth={genCellWidth}
-                accent="#f59e0b"
-                positionOffset={genPositionOffset}
-              />
-            ))}
-          </div>
-        ) : (
+        {(!genData || genTokens.length === 0) && (
           !genLoading && (
             <div style={{ padding: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ ...panel, textAlign: 'center', maxWidth: 400, borderColor: 'rgba(245,158,11,0.12)' }}>
