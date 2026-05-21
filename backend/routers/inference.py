@@ -23,6 +23,8 @@ class ForwardRequest(BaseModel):
 
 class RunWithCacheRequest(BaseModel):
     text: str
+    # "all" captures every hook; "essential" skips raw q/k/v/score tensors to save VRAM
+    cache_mode: str = "all"
 
 
 class LogitLensRequest(BaseModel):
@@ -103,19 +105,40 @@ async def run_with_cache_endpoint(request: RunWithCacheRequest):
     if model is None:
         raise HTTPException(status_code=400, detail="No model loaded")
 
-    tokens = model.to_tokens(request.text, prepend_bos=True)
-    str_tokens = list(model.to_str_tokens(request.text, prepend_bos=True))
-
-    _, cache = model.run_with_cache(tokens)
-    cache_dict = dict(cache.cache_dict)
-    cache_store.set(cache_dict, str_tokens)
-
-    keys = [{"key": k, "shape": list(v.shape)} for k, v in sorted(cache_dict.items())]
-    return {
-        "keys": keys,
-        "n_keys": len(keys),
-        "str_tokens": str_tokens,
+    # Hooks needed by every UI feature. Skips raw q/k/v/attn_scores which are
+    # large and unused by the UI, reducing peak VRAM by ~50% for big models.
+    ESSENTIAL_HOOKS = {
+        "hook_embed", "hook_pos_embed",
+        "hook_resid_pre", "hook_resid_mid", "hook_resid_post",
+        "hook_mlp_out", "hook_attn_out",
+        "attn.hook_pattern", "attn.hook_z",
     }
+
+    def _essential_filter(name: str) -> bool:
+        return any(h in name for h in ESSENTIAL_HOOKS)
+
+    try:
+        tokens = model.to_tokens(request.text, prepend_bos=True)
+        str_tokens = list(model.to_str_tokens(request.text, prepend_bos=True))
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        names_filter = _essential_filter if request.cache_mode == "essential" else None
+        with torch.no_grad():
+            _, cache = model.run_with_cache(tokens, names_filter=names_filter)
+        cache_dict = dict(cache.cache_dict)
+        cache_store.set(cache_dict, str_tokens, input_ids=tokens)
+
+        keys = [{"key": k, "shape": list(v.shape)} for k, v in sorted(cache_dict.items())]
+        return {
+            "keys": keys,
+            "n_keys": len(keys),
+            "str_tokens": str_tokens,
+            "cache_mode": request.cache_mode,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/logit_lens")
@@ -171,6 +194,85 @@ async def logit_lens_endpoint(request: LogitLensRequest):
         results.append({"layer": layer_idx, "label": label, "predictions": preds_per_pos})
 
     return {"results": results, "str_tokens": str_tokens, "n_layers": n_layers}
+
+
+class LogitLensGenRequest(BaseModel):
+    top_k: int = 3
+    max_new_tokens: int = 8
+
+
+@router.post("/logit_lens_generation")
+async def logit_lens_generation_endpoint(request: LogitLensGenRequest):
+    model = model_manager.model
+    if model is None:
+        raise HTTPException(status_code=400, detail="No model loaded")
+    if cache_store.input_ids is None:
+        raise HTTPException(status_code=400, detail="No cache. Run /api/inference/run_with_cache first.")
+
+    prompt_len = cache_store.input_ids.shape[1]
+
+    try:
+        with torch.no_grad():
+            generated = model.generate(
+                cache_store.input_ids,
+                max_new_tokens=request.max_new_tokens,
+                verbose=False,
+            )
+            _, gen_cache_obj = model.run_with_cache(generated)
+
+        gen_cache = dict(gen_cache_obj.cache_dict)
+        gen_str_tokens = list(model.to_str_tokens(generated[0]))
+        n_layers = model.cfg.n_layers
+        results = []
+
+        for layer_idx in range(n_layers + 1):
+            if layer_idx == 0:
+                embed = gen_cache.get("hook_embed")
+                pos_embed = gen_cache.get("hook_pos_embed")
+                if embed is None:
+                    continue
+                resid = embed + pos_embed if pos_embed is not None else embed
+                label = "embed"
+            else:
+                key = f"blocks.{layer_idx - 1}.hook_resid_post"
+                if key not in gen_cache:
+                    continue
+                resid = gen_cache[key]
+                label = f"L{layer_idx - 1}"
+
+            with torch.no_grad():
+                ln_out = model.ln_final(resid)
+                logits = model.unembed(ln_out)
+
+            logits_np = logits[0].detach().cpu().float().numpy()
+            probs = softmax(logits_np, axis=-1)
+            top_k = min(request.top_k, probs.shape[-1])
+
+            preds_per_pos = []
+            for pos_i, prob_row in enumerate(probs):
+                top_indices = np.argsort(-prob_row)[:top_k]
+                preds_per_pos.append({
+                    "position": pos_i,
+                    "top_k": [
+                        {
+                            "token_id": int(idx),
+                            "token_str": model.tokenizer.decode([int(idx)]),
+                            "probability": float(prob_row[idx]),
+                        }
+                        for idx in top_indices
+                    ],
+                })
+
+            results.append({"layer": layer_idx, "label": label, "predictions": preds_per_pos})
+
+        return {
+            "results": results,
+            "str_tokens": gen_str_tokens,
+            "prompt_len": prompt_len,
+            "n_layers": n_layers,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/attribution")
