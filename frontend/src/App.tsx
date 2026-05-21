@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import ModelHub from './pages/ModelHub/ModelHub'
 import TokenInspector from './pages/TokenInspector/TokenInspector'
 import ForwardPass from './pages/ForwardPass/ForwardPass'
@@ -46,8 +46,23 @@ const NAV: NavItem[] = [
   { id: 'generation-studio',  label: 'Generation',       phase: 10, icon: '▷', available: true  },
 ]
 
+const PAGE_COMPONENTS: Record<PageId, React.ComponentType> = {
+  'model-hub': ModelHub,
+  'token-inspector': TokenInspector,
+  'forward-pass': ForwardPass,
+  'activation-browser': ActivationBrowser,
+  'attention-viz': AttentionViz,
+  'logit-lens': LogitLens,
+  'attribution': Attribution,
+  'patching-lab': PatchingLab,
+  'circuit-analyzer': CircuitAnalyzer,
+  'hook-lab': HookLab,
+  'generation-studio': GenerationStudio,
+}
+
 export default function App() {
   const [page, setPage] = useState<PageId>('model-hub')
+  const [mounted, setMounted] = useState<Set<PageId>>(() => new Set(['model-hub']))
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#0a0a0f' }}>
@@ -77,7 +92,11 @@ export default function App() {
           return (
             <button
               key={item.id}
-              onClick={() => item.available && setPage(item.id)}
+              onClick={() => {
+                if (!item.available) return
+                setMounted(prev => new Set([...prev, item.id]))
+                setPage(item.id)
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -117,17 +136,23 @@ export default function App() {
 
       {/* Main content */}
       <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        {page === 'model-hub' && <ModelHub />}
-        {page === 'token-inspector' && <TokenInspector />}
-        {page === 'forward-pass' && <ForwardPass />}
-        {page === 'activation-browser' && <ActivationBrowser />}
-        {page === 'attention-viz' && <AttentionViz />}
-        {page === 'logit-lens' && <LogitLens />}
-        {page === 'attribution' && <Attribution />}
-        {page === 'patching-lab' && <PatchingLab />}
-        {page === 'circuit-analyzer' && <CircuitAnalyzer />}
-        {page === 'hook-lab' && <HookLab />}
-        {page === 'generation-studio' && <GenerationStudio />}
+        {NAV.map(item => {
+          if (!mounted.has(item.id)) return null
+          const Page = PAGE_COMPONENTS[item.id]
+          return (
+            <div
+              key={item.id}
+              style={{
+                flex: 1,
+                overflow: 'hidden',
+                display: page === item.id ? 'flex' : 'none',
+                flexDirection: 'column',
+              }}
+            >
+              <Page />
+            </div>
+          )
+        })}
       </main>
     </div>
   )

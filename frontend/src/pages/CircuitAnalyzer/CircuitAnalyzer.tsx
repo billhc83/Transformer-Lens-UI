@@ -184,7 +184,7 @@ export default function CircuitAnalyzer() {
     setError(null)
     try {
       const res = await axios.get<CompositionResponse>(`${API}/api/circuits/composition_scores`, {
-        timeout: 120_000,
+        timeout: 600_000,
       })
       setScores(res.data)
       setInfo(i => i ?? { labels: res.data.labels, n_layers: res.data.n_layers, n_heads: res.data.n_heads })

@@ -60,6 +60,7 @@ const ActivationBrowser: React.FC = () => {
   const [tensorLoading, setTensorLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [cacheMode, setCacheMode] = useState<'all' | 'essential'>('all');
 
   // Compare mode state
   const [compareMode, setCompareMode] = useState(false);
@@ -78,9 +79,13 @@ const ActivationBrowser: React.FC = () => {
       const res = await fetch('/api/inference/run_with_cache', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, cache_mode: cacheMode }),
       });
-      if (!res.ok) throw new Error((await res.json()).detail ?? res.statusText);
+      if (!res.ok) {
+        let msg = res.statusText;
+        try { const d = await res.json(); msg = d.detail ?? msg; } catch { msg = await res.text().catch(() => msg); }
+        throw new Error(msg);
+      }
       const data = await res.json();
       setKeys(data.keys);
     } catch (err: any) {
@@ -88,12 +93,16 @@ const ActivationBrowser: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [text]);
+  }, [text, cacheMode]);
 
   const fetchActivation = useCallback(async (key: string): Promise<ActivationData | null> => {
     try {
       const res = await fetch(`/api/activations/${encodeURIComponent(key)}`);
-      if (!res.ok) throw new Error((await res.json()).detail ?? res.statusText);
+      if (!res.ok) {
+        let msg = res.statusText;
+        try { const d = await res.json(); msg = d.detail ?? msg; } catch { msg = await res.text().catch(() => msg); }
+        throw new Error(msg);
+      }
       return await res.json();
     } catch (err: any) {
       setError(err.message);
@@ -205,6 +214,15 @@ const ActivationBrowser: React.FC = () => {
         >
           {loading ? 'Running…' : 'Run Cache'}
         </button>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#888', fontFamily: '"JetBrains Mono", monospace', cursor: 'pointer', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            checked={cacheMode === 'essential'}
+            onChange={e => setCacheMode(e.target.checked ? 'essential' : 'all')}
+            style={{ accentColor: '#a855f7' }}
+          />
+          Low VRAM mode
+        </label>
         {keys.length > 0 && (
           <span style={{ color: '#666', fontSize: 12, fontFamily: '"JetBrains Mono", monospace' }}>
             {keys.length} activations
