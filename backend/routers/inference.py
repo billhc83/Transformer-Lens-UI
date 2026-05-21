@@ -216,6 +216,7 @@ async def logit_lens_generation_endpoint(request: LogitLensGenRequest):
             generated = model.generate(
                 cache_store.input_ids,
                 max_new_tokens=request.max_new_tokens,
+                do_sample=False,
                 verbose=False,
             )
             _, gen_cache_obj = model.run_with_cache(generated)
