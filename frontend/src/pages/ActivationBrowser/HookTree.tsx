@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import HookTooltip from '../../components/shared/HookTooltip';
 
 interface KeyEntry {
   key: string;
@@ -86,7 +87,9 @@ const HookTree: React.FC<Props> = ({ keys, selectedKey, onSelect, compareMode = 
                     {isPinned ? '✓' : '○'}
                   </span>
                 )}
-                <span>{entry.key.split('.').slice(2).join('.')}</span>
+                <HookTooltip hookKey={entry.key}>
+                  <span>{entry.key.split('.').slice(2).join('.')}</span>
+                </HookTooltip>
                 <span style={{ color: '#666', marginLeft: 4, fontSize: 11 }}>
                   [{entry.shape.join('×')}]
                 </span>

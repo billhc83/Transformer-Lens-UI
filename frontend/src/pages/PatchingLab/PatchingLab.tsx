@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import axios from 'axios'
 import _PlotLib from 'react-plotly.js'
 const Plot = ((_PlotLib as any).default ?? _PlotLib) as any
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import InlineInsight from '../../components/shared/InlineInsight'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import { useSessionStore } from '../../store/sessionStore'
 
 const API = ''
 
@@ -88,6 +91,7 @@ export default function PatchingLab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
+  const addFinding = useSessionStore((s) => s.addFinding)
 
   const toggleType = (id: string) => {
     setSelectedTypes(prev =>
@@ -110,6 +114,26 @@ export default function PatchingLab() {
         }
       )
       setData(res)
+      // Find top causal site across all activation types
+      let topSite: { val: number; atype: string; li: number; pi: number } | null = null
+      for (const [atype, matrix] of Object.entries(res.results)) {
+        for (let li = 0; li < matrix.length; li++) {
+          for (let pi = 0; pi < matrix[li].length; pi++) {
+            const val = matrix[li][pi]
+            if (!topSite || Math.abs(val) > Math.abs(topSite.val)) {
+              topSite = { val, atype, li, pi }
+            }
+          }
+        }
+      }
+      if (topSite) {
+        const tok = res.str_tokens[topSite.pi] ?? `pos${topSite.pi}`
+        addFinding({
+          page: 'patching-lab',
+          headline: `Top causal site: ${topSite.atype} L${topSite.li} ${tok} (score ${topSite.val.toFixed(3)})`,
+          data: { topSite, clean_diff: res.clean_diff, corrupted_diff: res.corrupted_diff, answer_token: res.answer_token },
+        })
+      }
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Request failed')
       setData(null)
@@ -117,6 +141,26 @@ export default function PatchingLab() {
       setLoading(false)
     }
   }
+
+  const patchNextSteps: NextStep[] = useMemo(() => {
+    if (!data) return []
+    return [
+      { page: 'activation-browser' as const, label: 'Activation Browser', hint: 'Inspect the tensor at the top causal site directly' },
+      { page: 'hook-lab' as const, label: 'Hook Lab', hint: 'Ablate the top causal hook to confirm its role' },
+      { page: 'attribution' as const, label: 'Attribution', hint: 'Measure head-level contributions for the clean prompt' },
+    ]
+  }, [data])
+
+  const patchLiveData = useMemo(() => data ? {
+    clean_prompt: cleanPrompt,
+    corrupted_prompt: corruptedPrompt,
+    answer_token: data.answer_token,
+    baseline_token: data.baseline_token,
+    clean_diff: data.clean_diff,
+    corrupted_diff: data.corrupted_diff,
+    str_tokens: data.str_tokens,
+    results: data.results,
+  } : null, [data, cleanPrompt, corruptedPrompt])
 
   const heatmapLayout = (title: string) => ({
     paper_bgcolor: 'transparent',
@@ -349,22 +393,15 @@ export default function PatchingLab() {
           ))}
         </div>
       )}
+      <NextSteps steps={patchNextSteps} />
+      <InlineInsight pageType="patching-lab" liveData={patchLiveData} />
       <InterpretationModal
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}
         pageTitle="Patching Lab"
         pageType="patching-lab"
         guide={GUIDE}
-        liveData={data ? {
-          clean_prompt: cleanPrompt,
-          corrupted_prompt: corruptedPrompt,
-          answer_token: data.answer_token,
-          baseline_token: data.baseline_token,
-          clean_diff: data.clean_diff,
-          corrupted_diff: data.corrupted_diff,
-          str_tokens: data.str_tokens,
-          results: data.results,
-        } : null}
+        liveData={patchLiveData}
       />
     </div>
   )

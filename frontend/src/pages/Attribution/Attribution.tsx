@@ -3,6 +3,9 @@ import axios from 'axios'
 import _PlotLib from 'react-plotly.js'
 const Plot = ((_PlotLib as any).default ?? _PlotLib) as any
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import InlineInsight from '../../components/shared/InlineInsight'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import { useSessionStore } from '../../store/sessionStore'
 
 const API = ''
 
@@ -78,6 +81,7 @@ export default function Attribution() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
+  const addFinding = useSessionStore((s) => s.addFinding)
 
   const run = async () => {
     setLoading(true)
@@ -89,6 +93,17 @@ export default function Attribution() {
       )
       setData(res)
       setFocusPos(res.str_tokens.length - 1)
+      const lastPos = res.str_tokens.length - 1
+      const topAtLastPos = res.labels
+        .map((lbl, i) => ({ label: lbl, score: res.scores[i]?.[lastPos] ?? 0 }))
+        .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))[0]
+      if (topAtLastPos) {
+        addFinding({
+          page: 'attribution',
+          headline: `Top contributor: ${topAtLastPos.label} (${topAtLastPos.score > 0 ? '+' : ''}${topAtLastPos.score.toFixed(3)}) for "${answerToken}"`,
+          data: { mode, answerToken, topLabel: topAtLastPos.label, topScore: topAtLastPos.score },
+        })
+      }
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Request failed. Run run_with_cache first.')
       setData(null)
@@ -106,6 +121,33 @@ export default function Attribution() {
       .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
       .slice(0, 20)
   }, [data, focusPos])
+
+  const attrNextSteps: NextStep[] = useMemo(() => {
+    if (!data || topContribs.length === 0) return []
+    const top = topContribs[0]
+    const layerMatch = top.label.match(/^L?(\d+)/)
+    const steps: NextStep[] = []
+    if (layerMatch) {
+      const l = layerMatch[1]
+      steps.push({
+        page: 'attention-viz' as const,
+        label: `Attention · L${l}`,
+        hint: `Inspect attention patterns for the top contributing layer L${l}`,
+      })
+    }
+    steps.push({ page: 'circuit-analyzer' as const, label: 'Circuit Analyzer', hint: 'See composition paths for top contributing head' })
+    if (mode !== 'full') {
+      steps.push({ page: 'patching-lab' as const, label: 'Patching Lab', hint: 'Confirm causal influence via activation patching' })
+    }
+    return steps
+  }, [data, topContribs, mode])
+
+  const attrLiveData = useMemo(() => data ? {
+    answer_token_str: data.answer_token_str,
+    mode: data.mode,
+    str_tokens: data.str_tokens,
+    top_contribs: topContribs,
+  } : null, [data, topContribs])
 
   // Plotly heatmap data
   const heatmapTrace = useMemo(() => {
@@ -398,18 +440,15 @@ export default function Attribution() {
           </div>
         )
       )}
+      <NextSteps steps={attrNextSteps} />
+      <InlineInsight pageType="attribution" liveData={attrLiveData} />
       <InterpretationModal
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}
         pageTitle="Attribution Analyzer"
         pageType="attribution"
         guide={GUIDE}
-        liveData={data ? {
-          answer_token_str: data.answer_token_str,
-          mode: data.mode,
-          str_tokens: data.str_tokens,
-          top_contribs: topContribs,
-        } : null}
+        liveData={attrLiveData}
       />
     </div>
   )

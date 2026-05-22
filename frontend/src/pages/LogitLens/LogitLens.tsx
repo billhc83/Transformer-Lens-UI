@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react'
 import axios from 'axios'
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import InlineInsight from '../../components/shared/InlineInsight'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import { useSessionStore } from '../../store/sessionStore'
 
 const API = ''
 
@@ -133,7 +136,7 @@ function LayerRow({
       </div>
 
       <div style={{ display: 'flex', gap: 3, flexWrap: 'nowrap' }}>
-        {strTokens.map((tok, colIdx) => {
+        {strTokens.map((_tok, colIdx) => {
           const absPos = positionOffset + colIdx
           const posPred = result.predictions.find(p => p.position === absPos)
           if (!posPred || posPred.top_k.length === 0) return null
@@ -195,6 +198,7 @@ export default function LogitLens() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
+  const addFinding = useSessionStore((s) => s.addFinding)
 
   const [genData, setGenData] = useState<GenResponse | null>(null)
   const [genLoading, setGenLoading] = useState(false)
@@ -208,6 +212,17 @@ export default function LogitLens() {
     try {
       const { data: res } = await axios.post<LensResponse>(`${API}/api/inference/logit_lens`, { top_k: 3 })
       setData(res)
+      const hit = res.results.find(lr => {
+        const p = lr.predictions.find(p => p.position === targetPos)
+        return p !== undefined && (p.top_k[0]?.probability ?? 0) > 0.05
+      })
+      if (hit) {
+        addFinding({
+          page: 'logit-lens',
+          headline: `Answer emerges at ${hit.label} (pos ${targetPos})`,
+          data: { firstHitLayer: hit.layer, targetPos, str_tokens: res.str_tokens },
+        })
+      }
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Request failed. Run /api/inference/run_with_cache first.')
       setData(null)
@@ -255,6 +270,39 @@ export default function LogitLens() {
     }
     return null
   })()
+
+  const lensNextSteps: NextStep[] = data && firstHitLayer !== null ? [
+    {
+      page: 'attribution' as const,
+      label: `Attribution · ${data.results[firstHitLayer]?.label ?? `L${firstHitLayer}`}`,
+      hint: 'Check which components drove this layer jump',
+      badge: 'by_layer',
+    },
+    {
+      page: 'attention-viz' as const,
+      label: `Attention · L${firstHitLayer}`,
+      hint: 'Inspect attention patterns at the emergence layer',
+    },
+    {
+      page: 'patching-lab' as const,
+      label: 'Patching Lab',
+      hint: 'Confirm the causal site for this answer token',
+    },
+  ] : []
+
+  const lensLiveData = useMemo(() => data ? {
+    str_tokens: data.str_tokens,
+    n_layers: data.n_layers,
+    target_pos: targetPos,
+    emergence_layer: firstHitLayer,
+    results: data.results.map(r => ({
+      layer: r.layer,
+      label: r.label,
+      predictions: r.predictions
+        .filter(p => p.position === targetPos)
+        .map(p => ({ position: p.position, top_k: p.top_k.slice(0, 3) })),
+    })),
+  } : null, [data, targetPos, firstHitLayer])
 
   // For generation: find first layer where top-1 at the "producing" position exceeds 5%
   // Generated token I is produced by predictions at position (prompt_len - 1 + I)
@@ -560,23 +608,15 @@ export default function LogitLens() {
 
       </div>
 
+      <NextSteps steps={lensNextSteps} />
+      <InlineInsight pageType="logit-lens" liveData={lensLiveData} />
       <InterpretationModal
         isOpen={guideOpen}
         onClose={() => setGuideOpen(false)}
         pageTitle="Logit Lens"
         pageType="logit-lens"
         guide={GUIDE}
-        liveData={data ? {
-          str_tokens: data.str_tokens,
-          n_layers: data.n_layers,
-          target_pos: targetPos,
-          emergence_layer: firstHitLayer,
-          results: data.results.map(r => ({
-            layer: r.layer,
-            label: r.label,
-            predictions: r.predictions.filter(p => p.position === targetPos).map(p => ({ position: p.position, top_k: p.top_k.slice(0, 3) })),
-          })),
-        } : null}
+        liveData={lensLiveData}
       />
     </div>
   )

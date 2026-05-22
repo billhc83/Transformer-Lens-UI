@@ -1,8 +1,11 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import HookTree from './HookTree';
 import TensorViewer from './TensorViewer';
 import type { ActivationData } from './TensorViewer';
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal';
+import InlineInsight from '../../components/shared/InlineInsight';
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps';
+import { useSessionStore } from '../../store/sessionStore';
 
 const GUIDE: InterpretationGuide = {
   overview:
@@ -61,6 +64,7 @@ const ActivationBrowser: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [cacheMode, setCacheMode] = useState<'all' | 'essential'>('all');
+  const addFinding = useSessionStore((s) => s.addFinding);
 
   // Compare mode state
   const [compareMode, setCompareMode] = useState(false);
@@ -141,6 +145,13 @@ const ActivationBrowser: React.FC = () => {
       const data = await fetchActivation(key);
       setActivationData(data);
       setTensorLoading(false);
+      if (data) {
+        addFinding({
+          page: 'activation-browser',
+          headline: `Inspected ${key} — shape [${data.original_shape.join('×')}]`,
+          data: { key, shape: data.original_shape, stats: data.stats },
+        })
+      }
     }
   }, [compareMode, fetchActivation]);
 
@@ -161,6 +172,39 @@ const ActivationBrowser: React.FC = () => {
       return !prev;
     });
   }, []);
+
+  const activationNextSteps: NextStep[] = useMemo(() => {
+    if (!selectedKey || !activationData) return []
+    const steps: NextStep[] = []
+    const layerMatch = selectedKey.match(/blocks\.(\d+)/)
+    const isAttn = selectedKey.includes('attn')
+    const isMlp = selectedKey.includes('mlp') || selectedKey.includes('hook_mlp_out')
+    const isResid = selectedKey.includes('hook_resid')
+    if (layerMatch) {
+      const l = layerMatch[1]
+      steps.push({ page: 'attention-viz' as const, label: `Attention · L${l}`, hint: `See attention patterns at layer ${l}` })
+    }
+    if (isAttn || isResid) {
+      steps.push({ page: 'attribution' as const, label: 'Attribution', hint: 'Measure which heads drive this activation pattern' })
+    }
+    if (isMlp || isResid) {
+      steps.push({ page: 'patching-lab' as const, label: 'Patching Lab', hint: 'Confirm causal role of this activation via patching' })
+    }
+    if (steps.length === 0) {
+      steps.push({ page: 'logit-lens' as const, label: 'Logit Lens', hint: 'See how predictions evolve through layers' })
+    }
+    return steps
+  }, [selectedKey, activationData])
+
+  const activationLiveData = useMemo(() =>
+    activationData && selectedKey ? {
+      key: selectedKey,
+      shape: activationData.original_shape,
+      stats: activationData.stats,
+      str_tokens: activationData.str_tokens,
+    } : null,
+    [activationData, selectedKey]
+  )
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0a0a0f', color: 'white' }}>
@@ -288,6 +332,8 @@ const ActivationBrowser: React.FC = () => {
           str_tokens: activationData.str_tokens,
         } : null}
       />
+      <NextSteps steps={activationNextSteps} />
+      <InlineInsight pageType="activation-browser" liveData={activationLiveData} />
     </div>
   );
 };

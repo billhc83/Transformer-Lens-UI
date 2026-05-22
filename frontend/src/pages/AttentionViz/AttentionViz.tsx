@@ -2,6 +2,9 @@ import { useState, useCallback } from 'react'
 import axios from 'axios'
 import AttentionHeatmap from '../../components/viz/AttentionHeatmap'
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import InlineInsight from '../../components/shared/InlineInsight'
+import { useSessionStore } from '../../store/sessionStore'
 
 const API = ''
 
@@ -131,6 +134,8 @@ export default function AttentionViz() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
+  const addFinding = useSessionStore((s) => s.addFinding)
+  const markLayerExplored = useSessionStore((s) => s.markLayerExplored)
 
   const fetchLayer = useCallback(async (l: number) => {
     setLoading(true)
@@ -140,8 +145,17 @@ export default function AttentionViz() {
       const { data } = await axios.get(`${API}/api/activations/attention/${l}`)
       setPatterns(data.patterns)
       setStrTokens(data.str_tokens)
-      // infer max layer from n_heads (gpt2 has 12 layers)
       if (data.n_heads) setMaxLayer(11)
+      markLayerExplored('attention-viz', l)
+      const archetypes = (data.patterns as number[][][]).map((pat: number[][], h: number) => {
+        const cls = classifyHead(pat)
+        return `H${h}:${cls.label}`
+      }).join(', ')
+      addFinding({
+        page: 'attention-viz',
+        headline: `L${l} archetypes: ${archetypes.slice(0, 80)}`,
+        data: { layer: l, archetypes },
+      })
     } catch (e: any) {
       const msg = e?.response?.data?.detail ?? 'Fetch failed. Run /api/inference/run_with_cache first.'
       setError(msg)
@@ -344,6 +358,21 @@ export default function AttentionViz() {
               layerIndex={layer}
             />
           </div>
+        )
+      })()}
+      {((): React.ReactNode => {
+        const attnNextSteps: NextStep[] = patterns && selectedHead !== null ? [
+          { page: 'circuit-analyzer' as const, label: 'Circuit Analyzer', hint: `See composition paths involving L${layer}H${selectedHead}` },
+          { page: 'attribution' as const, label: 'Attribution · by_head', hint: 'Measure contribution scores for all heads', badge: 'by_head' },
+        ] : patterns ? [
+          { page: 'circuit-analyzer' as const, label: 'Circuit Analyzer', hint: 'Explore composition edges across all layers' },
+        ] : []
+        const attnLiveData = patterns ? { layer, str_tokens: strTokens, patterns } : null
+        return (
+          <>
+            <NextSteps steps={attnNextSteps} />
+            <InlineInsight pageType="attention-viz" liveData={attnLiveData} />
+          </>
         )
       })()}
       <InterpretationModal

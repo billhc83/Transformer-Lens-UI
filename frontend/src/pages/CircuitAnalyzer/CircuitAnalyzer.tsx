@@ -1,9 +1,12 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import axios from 'axios'
 import _PlotLib from 'react-plotly.js'
 const Plot = ((_PlotLib as any).default ?? _PlotLib) as any
 import CircuitGraph from '../../components/viz/CircuitGraph'
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import InlineInsight from '../../components/shared/InlineInsight'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import { useSessionStore } from '../../store/sessionStore'
 
 const API = ''
 
@@ -165,6 +168,7 @@ export default function CircuitAnalyzer() {
   const [loadingHead, setLoadingHead] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const addFinding = useSessionStore((s) => s.addFinding)
 
   const fetchInfo = async () => {
     setLoadingInfo(true)
@@ -188,6 +192,14 @@ export default function CircuitAnalyzer() {
       })
       setScores(res.data)
       setInfo(i => i ?? { labels: res.data.labels, n_layers: res.data.n_layers, n_heads: res.data.n_heads })
+      const topKEdge = getTopEdges(res.data.k_scores, res.data.labels, 1)[0]
+      if (topKEdge) {
+        addFinding({
+          page: 'circuit-analyzer',
+          headline: `Top K-comp: ${topKEdge.src} → ${topKEdge.dst} (${topKEdge.score.toFixed(3)})`,
+          data: { top_k_edge: topKEdge, n_layers: res.data.n_layers, n_heads: res.data.n_heads },
+        })
+      }
       // Calibrate slider to actual data range
       const flat = [
         ...res.data.q_scores.flat(),
@@ -229,6 +241,30 @@ export default function CircuitAnalyzer() {
       setLoadingHead(false)
     }
   }, [])
+
+  const circuitNextSteps: NextStep[] = useMemo(() => {
+    if (!scores) return []
+    const steps: NextStep[] = [
+      { page: 'attention-viz' as const, label: 'Attention Viz', hint: 'Inspect attention patterns for top composition heads' },
+      { page: 'attribution' as const, label: 'Attribution · by_head', hint: 'Measure head-level attribution scores', badge: 'by_head' },
+    ]
+    if (selectedNode) {
+      steps.unshift({ page: 'hook-lab' as const, label: `Ablate ${selectedNode}`, hint: `Zero-ablate ${selectedNode} to confirm its causal role` })
+    }
+    return steps
+  }, [scores, selectedNode])
+
+  const circuitLiveData = useMemo(() => scores && info ? {
+    labels: info.labels,
+    n_layers: info.n_layers,
+    n_heads: info.n_heads,
+    top_k_edges: getTopEdges(scores.k_scores, info.labels, 10),
+    top_q_edges: getTopEdges(scores.q_scores, info.labels, 10),
+    top_v_edges: getTopEdges(scores.v_scores, info.labels, 10),
+    selected_node: selectedNode,
+    qk_data: qkData ? { S_Q: qkData.S_Q.slice(0, 10), S_K: qkData.S_K.slice(0, 10) } : null,
+    ov_data: ovData ? { S_V: ovData.S_V.slice(0, 10), S_O: ovData.S_O.slice(0, 10) } : null,
+  } : null, [scores, info, selectedNode, qkData, ovData])
 
   const hasGraph = scores !== null && info !== null
   const edgeCount = scores
@@ -462,7 +498,7 @@ export default function CircuitAnalyzer() {
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', marginBottom: 8 }}>
                   TOP COMPOSITIONS FROM {selectedNode}
                 </div>
-                {outgoing.map(({ lbl, q, k, v, max }) => {
+                {outgoing.map(({ lbl, q, k, v: _v, max }) => {
                   const type = max === q ? 'Q' : max === k ? 'K' : 'V'
                   const color = type === 'Q' ? '#00d4ff' : type === 'K' ? '#a855f7' : '#4ade80'
                   return (
@@ -489,18 +525,10 @@ export default function CircuitAnalyzer() {
         pageTitle="Circuit Analyzer"
         pageType="circuit-analyzer"
         guide={GUIDE}
-        liveData={scores && info ? {
-          labels: info.labels,
-          n_layers: info.n_layers,
-          n_heads: info.n_heads,
-          top_k_edges: getTopEdges(scores.k_scores, info.labels, 10),
-          top_q_edges: getTopEdges(scores.q_scores, info.labels, 10),
-          top_v_edges: getTopEdges(scores.v_scores, info.labels, 10),
-          selected_node: selectedNode,
-          qk_data: qkData ? { S_Q: qkData.S_Q.slice(0, 10), S_K: qkData.S_K.slice(0, 10) } : null,
-          ov_data: ovData ? { S_V: ovData.S_V.slice(0, 10), S_O: ovData.S_O.slice(0, 10) } : null,
-        } : null}
+        liveData={circuitLiveData}
       />
+      <NextSteps steps={circuitNextSteps} />
+      <InlineInsight pageType="circuit-analyzer" liveData={circuitLiveData} />
     </div>
   )
 }

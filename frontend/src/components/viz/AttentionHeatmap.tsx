@@ -40,7 +40,7 @@ export default function AttentionHeatmap({
   compact = false,
   onClick,
   selected = false,
-  headLabel,
+  headLabel: _headLabel,
   headLabelColor = '#00d4ff',
 }: AttentionHeatmapProps) {
   const [tooltip, setTooltip] = useState<Tooltip | null>(null)

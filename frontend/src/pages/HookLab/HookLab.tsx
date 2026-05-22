@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import InlineInsight from '../../components/shared/InlineInsight'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import HookTooltip from '../../components/shared/HookTooltip'
+import { useSessionStore } from '../../store/sessionStore'
 
 const API = ''
 
@@ -122,6 +126,7 @@ export default function HookLab() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [guideOpen, setGuideOpen] = useState(false)
+  const addFinding = useSessionStore((s) => s.addFinding)
 
   useEffect(() => {
     axios.get(`${API}/api/hooks`).then(r => setActiveHooks(r.data.hooks)).catch(() => {})
@@ -170,6 +175,12 @@ export default function HookLab() {
       setBaseline(r.data.baseline)
       setModified(r.data.modified)
       setStrTokens(r.data.str_tokens)
+      const changed = r.data.baseline[0]?.token !== r.data.modified[0]?.token
+      addFinding({
+        page: 'hook-lab',
+        headline: `${hookName}: prediction ${changed ? 'changed' : 'unchanged'} (baseline: ${r.data.baseline[0]?.token ?? '?'})`,
+        data: { hook_name: hookName, changed, baseline_top: r.data.baseline[0], modified_top: r.data.modified[0] },
+      })
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? String(e)
       setError(msg)
@@ -274,7 +285,9 @@ export default function HookLab() {
               borderRadius: 6,
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: '#a855f7', marginBottom: 2 }}>{h.hook_name}</div>
+                <div style={{ fontSize: 11, color: '#a855f7', marginBottom: 2 }}>
+                  <HookTooltip hookKey={h.hook_name}>{h.hook_name}</HookTooltip>
+                </div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', whiteSpace: 'pre', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {h.code.split('\n')[0]}
                 </div>
@@ -346,21 +359,32 @@ export default function HookLab() {
           <DiffSummary baseline={baseline} modified={modified} />
         )}
       </div>
-      <InterpretationModal
-        isOpen={guideOpen}
-        onClose={() => setGuideOpen(false)}
-        pageTitle="Hook Lab"
-        pageType="hook-lab"
-        guide={GUIDE}
-        liveData={baseline.length > 0 ? {
-          hook_name: hookName,
-          hook_code: hookCode,
-          baseline,
-          modified,
-          str_tokens: strTokens,
+      {(() => {
+        const hookLiveData = baseline.length > 0 ? {
+          hook_name: hookName, hook_code: hookCode,
+          baseline, modified, str_tokens: strTokens,
           changed: baseline[0]?.token !== modified[0]?.token,
-        } : null}
-      />
+        } : null
+        const changed = baseline.length > 0 && baseline[0]?.token !== modified[0]?.token
+        const hookNextSteps: NextStep[] = baseline.length > 0 ? [
+          { page: 'attribution' as const, label: 'Attribution · by_head', hint: 'Measure head contributions for the same prompt', badge: 'by_head' },
+          ...(changed ? [{ page: 'patching-lab' as const, label: 'Patching Lab', hint: 'Run activation patching to find the causal site' }] : []),
+        ] : []
+        return (
+          <>
+            <NextSteps steps={hookNextSteps} />
+            <InlineInsight pageType="hook-lab" liveData={hookLiveData} />
+            <InterpretationModal
+              isOpen={guideOpen}
+              onClose={() => setGuideOpen(false)}
+              pageTitle="Hook Lab"
+              pageType="hook-lab"
+              guide={GUIDE}
+              liveData={hookLiveData}
+            />
+          </>
+        )
+      })()}
     </div>
   )
 }

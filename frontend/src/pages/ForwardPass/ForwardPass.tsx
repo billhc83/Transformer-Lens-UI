@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import InterpretationModal, { type InterpretationGuide } from '../../components/shared/InterpretationModal'
+import InlineInsight from '../../components/shared/InlineInsight'
+import NextSteps, { type NextStep } from '../../components/shared/NextSteps'
+import { useSessionStore } from '../../store/sessionStore'
 
 const CHIP_COLORS = ['#00d4ff', '#a855f7', '#14b8a6', '#ec4899', '#f97316']
 
@@ -67,6 +70,7 @@ export default function ForwardPass() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [guideOpen, setGuideOpen] = useState(false)
+  const addFinding = useSessionStore((s) => s.addFinding)
 
   async function runForward() {
     setLoading(true)
@@ -86,6 +90,15 @@ export default function ForwardPass() {
       const data: ForwardResponse = await res.json()
       setResult(data)
       setSelectedPos(data.predictions.length - 1)
+      const lastPred = data.predictions[data.predictions.length - 1]
+      const top1 = lastPred?.top_k[0]
+      if (top1) {
+        addFinding({
+          page: 'forward-pass',
+          headline: `Top prediction: "${top1.token_str}" (${(top1.probability * 100).toFixed(1)}%) for "${text.slice(0, 40)}"`,
+          data: { str_tokens: data.str_tokens, top1: top1.token_str, prob: top1.probability },
+        })
+      }
     } catch (e) {
       setError('Request failed — is the backend running?')
     } finally {
@@ -305,18 +318,32 @@ export default function ForwardPass() {
           </div>
         </div>
       )}
-      <InterpretationModal
-        isOpen={guideOpen}
-        onClose={() => setGuideOpen(false)}
-        pageTitle="Forward Pass"
-        pageType="forward-pass"
-        guide={GUIDE}
-        liveData={result ? {
+      {(() => {
+        const fwdLiveData = result ? {
           str_tokens: result.str_tokens,
           logits_shape: result.logits_shape,
           predictions: result.predictions.map(p => ({ position: p.position, token: p.token, top_k: p.top_k.slice(0, 5) })),
-        } : null}
-      />
+        } : null
+        const fwdNextSteps: NextStep[] = result ? [
+          { page: 'logit-lens' as const, label: 'Logit Lens', hint: 'See how each layer builds toward this prediction' },
+          { page: 'activation-browser' as const, label: 'Activation Browser', hint: 'Inspect internal tensors from this forward pass' },
+          { page: 'attribution' as const, label: 'Attribution', hint: 'Measure component contributions for the top prediction' },
+        ] : []
+        return (
+          <>
+            <NextSteps steps={fwdNextSteps} />
+            <InlineInsight pageType="forward-pass" liveData={fwdLiveData} />
+            <InterpretationModal
+              isOpen={guideOpen}
+              onClose={() => setGuideOpen(false)}
+              pageTitle="Forward Pass"
+              pageType="forward-pass"
+              guide={GUIDE}
+              liveData={fwdLiveData}
+            />
+          </>
+        )
+      })()}
     </div>
   )
 }
