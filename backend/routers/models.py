@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -16,9 +18,10 @@ def get_available_models():
 
 
 @router.post("/load")
-def load_model(req: LoadModelRequest):
+async def load_model(req: LoadModelRequest):
     try:
-        config = model_manager.load_model(req.model_name)
+        loop = asyncio.get_event_loop()
+        config = await loop.run_in_executor(None, model_manager.load_model, req.model_name)
         return {"status": "loaded", "config": config}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

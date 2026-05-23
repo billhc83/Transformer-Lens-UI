@@ -221,6 +221,33 @@ def fmt_hook_lab(d: dict) -> str:
     )
 
 
+def fmt_sae_studio(d: dict) -> str:
+    token_activation_rows = "\n".join([f"Token: {token}, Activation: {activation}" for token, activation in zip(d['str_tokens'], d['activations'])])
+
+    topTokens = sorted(zip(d['str_tokens'], d['activations']), key=lambda x: x[1], reverse=True)[:3]
+    top3_tokens = "\n".join([f"  - {token} (Activation: {activation})" for token, activation in topTokens])
+
+    if d['layer'] <= 3:
+        layer_stage = "early (syntax/position)"
+    elif d['layer'] <= 7:
+        layer_stage = "mid (semantics)"
+    else:
+        layer_stage = "late (facts/entities)"
+
+    return f"""
+For Layer {d['layer']} ({layer_stage}) in Feature ID: {d['feature_id']},
+Detected Tokens and Activations:
+{token_activation_rows}
+
+Top 3 Active Tokens:
+{top3_tokens}
+
+Neuronpedia URL: {d['neuronpedia_url']}
+
+What specific linguistic or semantic concept does this feature detect?
+"""
+
+
 def fmt_generation_studio(d: dict) -> str:
     tokens = d.get("tokens", [])
     prompt = d.get("prompt", "")
@@ -243,6 +270,28 @@ def fmt_generation_studio(d: dict) -> str:
     )
 
 
+def fmt_normalization_probe(data: dict) -> str:
+    concept = data.get("concept", "unknown")
+    sway = data.get("sway_score", 0)
+    mean_kl = data.get("mean_kl", 0)
+    probe_count = data.get("probe_count", 0)
+    top_tokens = data.get("top_consistent_tokens", [])
+    token_rows = "\n".join(
+        f"  {t['token']!r}: mean Δ={t['mean_delta']:+.4f}, consistency={t['consistency_pct']:.0f}%"
+        for t in top_tokens[:10]
+    )
+    return (
+        f"Normalization Probe\nConcept: {concept!r}\n"
+        f"Sway score: {sway:.4f}  Mean KL: {mean_kl:.4f}  Probes: {probe_count}\n\n"
+        f"Most consistently shifted tokens:\n{token_rows or '  (none above threshold)'}\n\n"
+        "What do these results tell us about how normalization-framing cues affect the model's "
+        "next-token predictions? Are the consistently shifted tokens semantically related to the concept? "
+        "Does the sway score suggest a meaningful effect or noise? "
+        "What mechanistic interpretability follow-up (logit lens, attribution, patching) would best "
+        "isolate the layer or head responsible for this shift?"
+    )
+
+
 FORMATTERS = {
     "token-inspector": fmt_token_inspector,
     "forward-pass": fmt_forward_pass,
@@ -254,6 +303,8 @@ FORMATTERS = {
     "circuit-analyzer": fmt_circuit_analyzer,
     "hook-lab": fmt_hook_lab,
     "generation-studio": fmt_generation_studio,
+    "sae-studio": fmt_sae_studio,
+    "normalization-probe": fmt_normalization_probe,
 }
 
 

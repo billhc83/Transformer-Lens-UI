@@ -27,7 +27,7 @@ export default function useModels() {
   useEffect(() => {
     fetch('/api/models/available')
       .then((r) => r.json())
-      .then((d) => setModels(d.models))
+      .then((d) => setModels([...d.models].sort((a, b) => Number(b.is_local) - Number(a.is_local))))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])

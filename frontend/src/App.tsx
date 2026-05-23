@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import ModelHub from './pages/ModelHub/ModelHub'
 import TokenInspector from './pages/TokenInspector/TokenInspector'
 import ForwardPass from './pages/ForwardPass/ForwardPass'
@@ -11,6 +10,8 @@ import CircuitAnalyzer from './pages/CircuitAnalyzer/CircuitAnalyzer'
 import HookLab from './pages/HookLab/HookLab'
 import GenerationStudio from './pages/GenerationStudio/GenerationStudio'
 import ReportStudio from './pages/ReportStudio/ReportStudio'
+import SAEStudio from './pages/SAEStudio/SAEStudio'
+import NormalizationProbe from './pages/NormalizationProbe/NormalizationProbe'
 import { useSessionStore, type PageId } from './store/sessionStore'
 
 interface NavItem {
@@ -35,6 +36,8 @@ const NAV: NavItem[] = [
   { id: 'hook-lab',           label: 'Hook Lab',         phase: 9,  icon: '⊕', available: true  },
   { id: 'generation-studio',  label: 'Generation',       phase: 10, icon: '▷', available: true  },
   { id: 'report-studio',      label: 'Report Studio',    phase: 11, icon: '◈', available: true  },
+  { id: 'sae-studio',          label: 'SAE Features',     phase: 12, icon: '⬡', available: true  },
+  { id: 'normalization-probe', label: 'Norm Probe',       phase: 13, icon: '⚗', available: true  },
 ]
 
 type ComponentMap = Partial<Record<PageId, React.ComponentType>>
@@ -52,22 +55,17 @@ const PAGE_COMPONENTS: ComponentMap = {
   'hook-lab': HookLab,
   'generation-studio': GenerationStudio,
   'report-studio': ReportStudio,
+  'sae-studio': SAEStudio,
+  'normalization-probe': NormalizationProbe,
 }
 
 export default function App() {
   const activePage = useSessionStore((s) => s.activePage)
-  const setActivePage = useSessionStore((s) => s.setActivePage)
+  const navigateTo = useSessionStore((s) => s.navigateTo)
+  const mountedPages = useSessionStore((s) => s.mountedPages)
   const visitedPages = useSessionStore((s) => s.visitedPages)
   const exploredLayers = useSessionStore((s) => s.exploredLayers)
   const findings = useSessionStore((s) => s.findings)
-
-  const [mounted, setMounted] = useState<Set<PageId>>(() => new Set(['model-hub']))
-
-  function navigate(id: PageId) {
-    if (!id) return
-    setMounted((prev) => new Set([...prev, id]))
-    setActivePage(id)
-  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden', background: '#0a0a0f' }}>
@@ -81,6 +79,7 @@ export default function App() {
         background: 'rgba(255,255,255,0.015)',
         padding: '16px 0',
         gap: '2px',
+        overflowY: 'auto',
       }}>
         {/* Logo */}
         <div style={{
@@ -102,7 +101,7 @@ export default function App() {
           return (
             <button
               key={item.id}
-              onClick={() => item.available && navigate(item.id)}
+              onClick={() => item.available && navigateTo(item.id)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -202,7 +201,7 @@ export default function App() {
       {/* Main content — keep all mounted pages in DOM to preserve state */}
       <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {NAV.map((item) => {
-          if (!mounted.has(item.id)) return null
+          if (!mountedPages.includes(item.id)) return null
           const Page = PAGE_COMPONENTS[item.id]
           if (!Page) return null
           return (

@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function NextSteps({ steps }: Props) {
-  const setActivePage = useSessionStore((s) => s.setActivePage)
+  const navigateTo = useSessionStore((s) => s.navigateTo)
   if (steps.length === 0) return null
 
   return (
@@ -41,7 +41,7 @@ export default function NextSteps({ steps }: Props) {
       {steps.map((step) => (
         <button
           key={step.page + step.label}
-          onClick={() => setActivePage(step.page)}
+          onClick={() => navigateTo(step.page)}
           title={step.hint}
           style={{
             display: 'flex',

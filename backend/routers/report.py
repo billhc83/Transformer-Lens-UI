@@ -43,6 +43,7 @@ PAGE_LABELS = {
     "circuit-analyzer": "Circuit Analyzer",
     "hook-lab": "Hook Lab",
     "generation-studio": "Generation Studio",
+    "normalization-probe": "Normalization Probe",
 }
 
 

@@ -13,6 +13,8 @@ export type PageId =
   | 'hook-lab'
   | 'generation-studio'
   | 'report-studio'
+  | 'sae-studio'
+  | 'normalization-probe'
 
 export interface Finding {
   page: PageId
@@ -24,6 +26,9 @@ export interface Finding {
 interface SessionState {
   activePage: PageId
   setActivePage: (page: PageId) => void
+
+  mountedPages: PageId[]
+  navigateTo: (page: PageId) => void
 
   visitedPages: PageId[]
   markVisited: (page: PageId) => void
@@ -40,6 +45,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   activePage: 'model-hub',
   setActivePage: (page) => {
     set({ activePage: page })
+    get().markVisited(page)
+  },
+
+  mountedPages: ['model-hub'],
+  navigateTo: (page) => {
+    set((s) => ({
+      activePage: page,
+      mountedPages: s.mountedPages.includes(page) ? s.mountedPages : [...s.mountedPages, page],
+    }))
     get().markVisited(page)
   },
 
